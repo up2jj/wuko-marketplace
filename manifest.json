@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "workflows": [
+    {
+      "name": "hello-wuko",
+      "path": ".wuko/workflows/hello-wuko.yaml",
+      "description": "Demonstrate variables and step outputs in a standalone Wuko workflow"
+    }
+  ]
+}

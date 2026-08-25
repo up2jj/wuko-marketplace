@@ -1,0 +1,19 @@
+version: 1
+name: hello-wuko
+description: Demonstrate variables and step outputs in a standalone Wuko workflow
+
+vars:
+  name: Wuko
+
+steps:
+  - id: greet
+    type: shell
+    with:
+      command: printf
+      args: ["Hello, %s!\n", "{{ .vars.name }}"]
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args: ["Greeting step exited with code %s.\n", "{{ .steps.greet.exit_code }}"]
