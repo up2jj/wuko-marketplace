@@ -1,10 +1,15 @@
 {
   "version": 1,
-  "workflows": [
+  "packages": [
     {
       "name": "hello-wuko",
-      "path": ".wuko/workflows/hello-wuko.yaml",
-      "description": "Demonstrate variables and step outputs in a standalone Wuko workflow"
+      "source": ".wuko/workflows/hello-wuko",
+      "path": "packages/hello-wuko.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Demonstrate variables and step outputs in a standalone Wuko workflow",
+      "source_sha256": "05779d8752652949290c6968aba846cab803644bba6ebca10a5324152b5ac5aa",
+      "sha256": "fe14392bee95c3376bd42c7a210f5ed27a15867885cd6e962130d7c84083cdf8"
     }
   ]
 }
