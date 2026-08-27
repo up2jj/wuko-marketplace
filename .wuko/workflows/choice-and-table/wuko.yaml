@@ -1,0 +1,114 @@
+version: 1
+package_version: 1.0.0
+name: choice-and-table
+description: Browse objects in a paginated table and compute every choice property from the source item
+
+# Two interactive features over one object list:
+#   tui_table          - display-only, paginated, publishes nothing
+#   tui_choice *_expr  - compute label, value, description, disabled, reason,
+#                        and default from each item instead of mapping fields
+#
+# Interactive:
+#   wuko run --file .wuko/workflows/choice-and-table/wuko.yaml
+# Non-interactive (prompts need supplied values):
+#   wuko run --file .wuko/workflows/choice-and-table/wuko.yaml \
+#     --var environment=staging --var access_mode=read-only
+
+vars:
+  preferred_environment: staging
+  # prod-cluster is deliberately missing, so the prod row renders disabled.
+  available_contexts: [dev-cluster, staging-cluster]
+  environments:
+    - name: dev
+      label: Development
+      context: dev-cluster
+      replicas: 1
+      tier: sandbox
+    - name: staging
+      label: Staging
+      context: staging-cluster
+      replicas: 2
+      tier: preproduction
+    - name: prod
+      label: Production
+      context: prod-cluster
+      replicas: 6
+      tier: production
+
+steps:
+  # `from` must start with vars. or steps. and resolve to a list of objects.
+  # Columns map a header to a required, optionally dotted, field. Omit `width`
+  # to size from the header and values. The step publishes NO outputs and sets
+  # no variable - it exists purely to show the data before a decision.
+  - id: inventory
+    type: tui_table
+    with:
+      message: Known environments
+      from: vars.environments
+      columns:
+        - {header: Name, field: name, width: 12}
+        - {header: Label, field: label}
+        - {header: Context, field: context}
+        - {header: Tier, field: tier}
+        - {header: Replicas, field: replicas}
+
+  - id: environment
+    type: tui_choice
+    with:
+      variable: environment
+      message: Select an environment
+      from: vars.environments
+      # Expressions receive the raw source value as `item` plus the normal
+      # workflow roots, and run in label -> value -> description -> disabled ->
+      # reason -> default order. Each may reference properties resolved earlier
+      # in that order, which is why reason_expr can read `disabled`.
+      # A *_field and its *_expr are mutually exclusive, and expressions are
+      # unavailable for static `choices`.
+      label_expr: 'item.label + " (" + item.tier + ")"'
+      value_expr: item.name
+      description_expr: '"kubectl context: " + item.context + " | " + string(item.replicas) + " replicas"'
+      disabled_expr: '!(item.context in vars.available_contexts)'
+      reason_expr: 'disabled ? "Context " + item.context + " is not configured" : ""'
+      default_expr: 'item.name == vars.preferred_environment'
+
+  # Computed labels and values change only what is displayed and selected.
+  # `.item` keeps a clone of the ORIGINAL source object.
+  - id: selection
+    type: shell
+    with:
+      command: printf
+      args:
+        - "value=%s label=%s context=%s tier=%s\n"
+        - "{{ .steps.environment.value }}"
+        - "{{ .steps.environment.label }}"
+        - "{{ .steps.environment.item.context }}"
+        - "{{ .steps.environment.item.tier }}"
+
+  - id: modes
+    type: set
+    with:
+      variable: modes
+      expr: 'vars.environment == "prod" ? ["read-only"] : ["read-only", "read-write"]'
+
+  # With exactly one enabled choice, an interactive run selects it and skips the
+  # picker entirely. Zero or multiple enabled choices keep the normal picker.
+  # It applies to interactive runs only: supplied values still validate, and a
+  # non-interactive run still requires the variable unless the choice is
+  # optional. Incompatible with multiple: true.
+  - id: access_mode
+    type: tui_choice
+    with:
+      variable: access_mode
+      message: Select an access mode
+      from: vars.modes
+      auto_select_single: true
+
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s access to %s on %s\n"
+        - "{{ .vars.access_mode }}"
+        - "{{ .steps.environment.label }}"
+        - "{{ .steps.environment.item.context }}"

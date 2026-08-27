@@ -2,14 +2,92 @@
   "version": 1,
   "packages": [
     {
+      "name": "choice-and-table",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/choice-and-table",
+      "path": "packages/choice-and-table.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Browse objects in a paginated table and compute every choice property from the source item",
+      "source_sha256": "03d2cab693f225b0e6ca47d4a418e8f5b1913b80a88e882898a181877b87f919",
+      "sha256": "110f96c6c784cee158b484417901e4aa223d94a5385ec9a06405494acb817a06"
+    },
+    {
       "name": "hello-wuko",
+      "package_version": "1.0.0",
       "source": ".wuko/workflows/hello-wuko",
       "path": "packages/hello-wuko.tar.gz",
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Demonstrate variables and step outputs in a standalone Wuko workflow",
-      "source_sha256": "05779d8752652949290c6968aba846cab803644bba6ebca10a5324152b5ac5aa",
-      "sha256": "fe14392bee95c3376bd42c7a210f5ed27a15867885cd6e962130d7c84083cdf8"
+      "source_sha256": "656a37167fcd52a1d44cf4d6dfca60bf7e53d7750b529d8ebafd11e7f68646de",
+      "sha256": "9c123b3b2bf55d44ffbe4562ceb7be97a49c5ce5cac547f306d48a00bdff9981"
+    },
+    {
+      "name": "lua-typed-args",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/lua-typed-args",
+      "path": "packages/lua-typed-args.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Pass typed structured data into Lua with argument expressions and read the runtime snapshot roots",
+      "source_sha256": "0846507ef7a4a497907fbbae55cead050827963ac275a0a1eb6e8606ed8d1c76",
+      "sha256": "14c5a443b3f2f98080a769702647e1edebc02ddaa1522e5a48c9b201f13b33f4"
+    },
+    {
+      "name": "multiplexer-status",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/multiplexer-status",
+      "path": "packages/multiplexer-status.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Label and annotate the hosting tmux, cmux, or Herdr context, degrading cleanly when there is none",
+      "source_sha256": "dc68fe74a4cf0af0c9b42616848c521bb5f97b6231432be18f0f0ae7c0bad770",
+      "sha256": "444a36e9716fcf2eea0e347fa89016a5520b7183409fa629efd13e13a5243052"
+    },
+    {
+      "name": "probe-exit-codes",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/probe-exit-codes",
+      "path": "packages/probe-exit-codes.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Treat a command's non-zero exit status as data with allowed_exit_codes and captured streams",
+      "source_sha256": "4f2dede0a53c1aade4cd46ce3c7b072ed10f8d695cc5210c1533449bd92c5850",
+      "sha256": "d631389662911deacd1bcd1696184b08049fdcd00ba2b277a6f41f444beff3e3"
+    },
+    {
+      "name": "race-a-monitor",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/race-a-monitor",
+      "path": "packages/race-a-monitor.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Race a sequential body against a named monitor and publish the recorded winner",
+      "source_sha256": "12c25bfa595be558827761c076ec9f31f711d71f6f2c48e3307cb83aebebae90",
+      "sha256": "c1db4318bdad1b5004d045dad2f8ec90db1000a71bbd32d29edbe4fe1b631c90"
+    },
+    {
+      "name": "recover-and-rollback",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/recover-and-rollback",
+      "path": "packages/recover-and-rollback.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Recover from a failing step with the try/catch control and the structured error root",
+      "source_sha256": "c57b87faa8acd4dd040a387c7a9cc5a50044de8c6305c8d573083cf3ca6cf02b",
+      "sha256": "d0316dbca9a30bcc84f1c0964ce5aa0accefd39c84a6c4010681165f36dff55a"
+    },
+    {
+      "name": "scripted-pty",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/scripted-pty",
+      "path": "packages/scripted-pty.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Drive an interactive PTY program with scripted interactions, dynamic sends, and console styling",
+      "source_sha256": "aa0f505bd634a4f684f6d8e175f9c3cbc464f5b4e4064fabb956f975767996cc",
+      "sha256": "a026901ea20b6201a8c4ea000ca45a69cae499e2827b229b2a83b7b3689774bb"
     }
   ]
 }

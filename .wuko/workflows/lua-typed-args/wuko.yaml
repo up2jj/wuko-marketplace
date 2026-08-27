@@ -1,0 +1,100 @@
+version: 1
+package_version: 1.0.0
+name: lua-typed-args
+description: Pass typed structured data into Lua with argument expressions and read the runtime snapshot roots
+
+# A plain `args:` entry is a template and always arrives as a string. An `expr:`
+# binding evaluates an Expr and hands Lua the real value: lists stay lists,
+# numbers stay numbers, nested objects stay tables.
+#
+#   wuko run --file .wuko/workflows/lua-typed-args/wuko.yaml
+
+steps:
+  - id: inventory_json
+    type: shell
+    with:
+      command: printf
+      args:
+        - '%s'
+        - >-
+          {"deployments":[
+            {"metadata":{"name":"api","team":"platform"},"replicas":3},
+            {"metadata":{"name":"web","team":"frontend"},"replicas":2},
+            {"metadata":{"name":"worker","team":"platform"},"replicas":4}
+          ]}
+      stdout: capture
+
+  # decode turns the captured string into a typed value at .steps.<id>.value.
+  - id: inventory
+    type: decode
+    with:
+      format: json
+      from: steps.inventory_json.stdout
+
+  - id: inspect
+    type: lua
+    with:
+      source: |
+        -- wuko.args.inventory is a real Lua array of tables, not a string.
+        local total = 0
+        local names = {}
+        local by_team = {}
+
+        for _, deployment in ipairs(wuko.args.inventory) do
+          total = total + deployment.replicas
+          names[#names + 1] = deployment.metadata.name
+          local team = deployment.metadata.team
+          by_team[team] = (by_team[team] or 0) + deployment.replicas
+        end
+
+        -- A templated arg would have arrived as text; this one keeps its type.
+        assert(type(wuko.args.inventory) == "table", "inventory must be a table")
+        assert(type(wuko.args.threshold) == "number", "threshold must be a number")
+
+        -- Snapshot roots: wuko.inputs, wuko.steps, wuko.dependencies,
+        -- wuko.workflow, and wuko.run. Mutating these tables changes nothing.
+        wuko.output("workflow_name", wuko.workflow.name)
+        wuko.output("decoded_by", wuko.steps.inventory_json.exit_code)
+
+        wuko.output("total_replicas", total)
+        wuko.output("names", names)
+        wuko.output("by_team", by_team)
+        wuko.output("over_threshold", total > wuko.args.threshold)
+        wuko.set_var("total_replicas", total)
+      args:
+        # Typed: the list arrives intact.
+        inventory:
+          expr: steps.inventory.value.deployments
+        threshold:
+          expr: "5"
+        # Templated for contrast: this one is a string, "3 deployments".
+        summary: "{{ len .steps.inventory.value.deployments }} deployments"
+        # Argument expressions use the normal Expr roots: inputs, vars, env,
+        # steps, dependencies, batch, foreach, matrix, finally, workflow, run.
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "workflow=%s total=%s over_threshold=%s\n"
+        - "{{ .steps.inspect.workflow_name }}"
+        - "{{ .steps.inspect.total_replicas }}"
+        - "{{ .steps.inspect.over_threshold }}"
+
+  - id: teams
+    type: shell
+    with:
+      command: printf
+      args:
+        - "platform=%s frontend=%s\n"
+        - "{{ .steps.inspect.by_team.platform }}"
+        - "{{ .steps.inspect.by_team.frontend }}"
+
+  # Lua outputs stay typed too, so downstream conditions get real booleans.
+  - id: scale_down
+    type: shell
+    if: steps.inspect.over_threshold
+    with:
+      command: printf
+      args: ["%s replicas exceeds the threshold\n", "{{ .vars.total_replicas }}"]

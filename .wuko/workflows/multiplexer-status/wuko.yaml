@@ -1,0 +1,74 @@
+version: 1
+package_version: 1.0.0
+name: multiplexer-status
+description: Label and annotate the hosting tmux, cmux, or Herdr context, degrading cleanly when there is none
+
+# The multiplexer step controls the terminal context hosting Wuko. It detects
+# tmux, then Herdr, then cmux. With none present it still SUCCEEDS, reporting
+# active: false - so a workflow that uses it stays portable.
+#
+#   wuko run --file .wuko/workflows/multiplexer-status/wuko.yaml
+#
+# Separately, the multiplexer REPORTER animates root progress in the same title:
+#   wuko run --file .wuko/workflows/multiplexer-status/wuko.yaml \
+#     --reporter plain --reporter multiplexer
+# While that reporter is enabled it owns the title, so a title step below may be
+# replaced by the reporter's next frame.
+
+vars:
+  task: nightly rebuild
+
+steps:
+  - id: label
+    type: multiplexer
+    with:
+      # `operation` is always required, and each operation has a strict field
+      # allow-list: `title` here, nothing on clear_title. Set `provider` only
+      # when a nested environment must target a specific outer integration.
+      operation: title
+      title: "wuko - {{ .vars.task }}"
+
+  - id: detected
+    type: shell
+    with:
+      command: printf
+      args:
+        - "active=%s provider=%s operation=%s changed=%s\n"
+        - "{{ .steps.label.active }}"
+        - "{{ .steps.label.provider }}"
+        - "{{ .steps.label.operation }}"
+        - "{{ .steps.label.changed }}"
+
+  - id: work
+    type: shell
+    with:
+      command: sh
+      args: ["-c", "printf 'rebuilding...\\n'; sleep 1; printf 'rebuild finished\\n'"]
+
+  # Guard provider-dependent operations on `active` so the workflow still runs
+  # outside a multiplexer. Provider-specific operations (cmux status/progress/
+  # log, Herdr metadata) are rejected when the detected provider does not
+  # advertise them, so keep portable workflows to title/clear_title/zoom/notify.
+  - id: notify
+    type: multiplexer
+    if: steps.label.active
+    with:
+      operation: notify
+      title: Rebuild finished
+      body: "{{ .workflow.name }} completed {{ .vars.task }}"
+
+  - id: outside_multiplexer
+    type: shell
+    if: steps.label.active == false
+    with:
+      command: printf
+      args: ["no tmux, cmux, or Herdr detected - the title steps were no-ops\n"]
+
+# Title changes are NOT restored when the workflow ends, so clear it explicitly.
+# Cleanup runs whether the main phase succeeded or failed.
+finally:
+  - id: reset_title
+    type: multiplexer
+    if: steps.label.active
+    with:
+      operation: clear_title

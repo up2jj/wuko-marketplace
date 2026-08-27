@@ -1,0 +1,79 @@
+version: 1
+package_version: 1.0.0
+name: probe-exit-codes
+description: Treat a command's non-zero exit status as data with allowed_exit_codes and captured streams
+
+# Some commands use their exit status as an observation rather than a failure.
+# `grep` is the classic case: 0 means matched, 1 means no match, 2 means a real
+# error. `allowed_exit_codes` lets the step commit its outputs for 0 and 1 while
+# a genuine error still fails the workflow.
+#
+#   wuko run --file .wuko/workflows/probe-exit-codes/wuko.yaml
+#   wuko run --file .wuko/workflows/probe-exit-codes/wuko.yaml --var needle=alpha
+
+vars:
+  needle: gamma
+  show_failure: false
+
+steps:
+  - id: probe
+    type: shell
+    with:
+      command: sh
+      args:
+        - "-c"
+        - "printf 'alpha\\nbeta\\n' | grep -c -- '{{ .vars.needle }}'"
+      # The list REPLACES the default [0], so 0 must be listed explicitly.
+      # Codes outside it keep normal failure and retry behavior; an allowed exit
+      # completes immediately without retrying. Startup, stream, timeout, and
+      # cancellation errors still fail regardless of what is listed here.
+      allowed_exit_codes: [0, 1]
+      # Capture instead of redirecting through a temporary file. `capture_limit`
+      # bounds each stream independently; without it, capture is unlimited.
+      stdout: capture
+      stderr: capture
+      capture_limit: 64KiB
+
+  # An allowed non-zero exit still commits every ordinary shell output.
+  - id: matched
+    type: set
+    with:
+      variable: matched
+      expr: steps.probe.exit_code == 0
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "needle=%s exit_code=%s matched=%s truncated=%s\n"
+        - "{{ .vars.needle }}"
+        - "{{ .steps.probe.exit_code }}"
+        - "{{ .vars.matched }}"
+        - "{{ .steps.probe.stdout_truncated }}"
+
+  - id: count
+    type: shell
+    if: vars.matched
+    with:
+      command: printf
+      args: ["grep counted %s", "{{ .steps.probe.stdout }}"]
+
+  - id: absent
+    type: shell
+    if: steps.probe.exit_code == 1
+    with:
+      command: printf
+      args: ["no line matched %s - not an error, just an observation\n", "{{ .vars.needle }}"]
+
+  # A code outside the allowed list still fails. `grep` exits 2 on a bad option,
+  # so this step is guarded and off by default; flip it with --var show_failure=true
+  # to see the ordinary failure path.
+  - id: real_error
+    type: shell
+    if: vars.show_failure
+    with:
+      command: sh
+      args: ["-c", "printf 'alpha\\n' | grep --not-an-option x"]
+      allowed_exit_codes: [0, 1]
+

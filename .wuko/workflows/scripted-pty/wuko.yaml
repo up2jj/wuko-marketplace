@@ -1,0 +1,127 @@
+version: 1
+package_version: 1.0.0
+name: scripted-pty
+description: Drive an interactive PTY program with scripted interactions, dynamic sends, and console styling
+
+# `interactions` scripts a PTY without an external expect(1). Each entry writes
+# `send`; add `expect` to wait for a prompt first. Headless scripted PTYs use a
+# 24x80 terminal and need no file-backed terminal, so the default path here runs
+# fine non-interactively and in CI.
+#
+# The target below is an inline sh script that prompts, so nothing external is
+# required:
+#   wuko run --file .wuko/workflows/scripted-pty/wuko.yaml
+#   wuko run --file .wuko/workflows/scripted-pty/wuko.yaml --env DEMO_PASSWORD=hunter2
+
+vars:
+  username: deploy-bot
+  workspace: eu-central
+  # Opt in to the two steps that need a real terminal.
+  handoff: false
+  inject_console: true
+
+env:
+  # Passed through from the caller's environment; never write a secret into a
+  # workflow file. Unset simply renders empty.
+  # Templates are strict, so `get` + `default` supplies a placeholder when the
+  # caller did not pass one through.
+  DEMO_PASSWORD: '{{ get "DEMO_PASSWORD" .env | default "not-a-real-secret" }}'
+
+templates:
+  # A stand-in for ssh, a database console, or a remote shell.
+  login_program: |
+    printf 'Login: '; read -r user
+    printf 'Password: '; read -r secret
+    printf 'workspace> '; read -r command
+    printf '\nconnected user=%s workspace_command=%s secret_len=%s\n' \
+      "$user" "$command" "$(printf '%s' "$secret" | wc -c | tr -d ' ')"
+
+steps:
+  - id: console
+    type: shell
+    with:
+      command: sh
+      args: ["-c", "{{ template \"login_program\" . }}"]
+      tty: true
+      # `expect` is a Go regexp matched against the raw PTY byte stream - ANSI
+      # escapes and carriage returns are NOT stripped, so keep patterns loose.
+      # `send` uses Go templates (unlike argv.expr / interactions.expr, which
+      # use Expr). `newline: true` presses Enter.
+      interactions:
+        - expect: 'Login: '
+          send: "{{ .vars.username }}"
+          newline: true
+          timeout: 15s
+        - expect: 'Password: '
+          send: "{{ .env.DEMO_PASSWORD }}"
+          newline: true
+          # Redacted from diagnostics, and PTY echo is suppressed while it is
+          # written. A child that prints the value itself can still leak it.
+          sensitive: true
+        - expect: 'workspace> '
+          send: "use {{ .vars.workspace }}"
+          newline: true
+      # No `interact:` here, so the command finishes headlessly after the script.
+      # TTY output is one merged live stream captured to stdout with a fixed
+      # 1 MiB bound; stdout/stderr/capture_limit cannot be set with tty: true.
+
+  - id: transcript
+    type: shell
+    with:
+      command: printf
+      args: ["exit_code=%s truncated=%s\n", "{{ .steps.console.exit_code }}", "{{ .steps.console.stdout_truncated }}"]
+
+  # Consecutive send-only entries are written immediately in declaration order,
+  # so startup input needs no artificial prompt. Read a fixed number of lines:
+  # a PTY has no EOF, so a `while read` loop would block forever after the
+  # scripted sequence ends.
+  - id: preamble
+    type: shell
+    timeout: 30s
+    with:
+      command: sh
+      args: ["-c", "read -r a; read -r b; printf 'received %s then %s\\n' \"$a\" \"$b\""]
+      tty: true
+      interactions:
+        - {send: select-project, newline: true}
+        - {send: enable-feature, newline: true}
+
+  # The expression form builds the interaction list at runtime. It uses Expr
+  # (not Go templates) and must return a list of interaction objects; the strings
+  # it produces are used as-is and are not rendered afterwards.
+  - id: dynamic_console
+    type: shell
+    # With inject_console: false the expression returns an empty list and the
+    # child runs headlessly with nothing scripted. A PTY never sees EOF, so give
+    # any such step a timeout rather than letting it block on `read`.
+    timeout: 30s
+    with:
+      command: sh
+      args: ["-c", "printf 'console> '; read -r c; printf '\\nran %s\\n' \"$c\""]
+      tty: true
+      interactions:
+        expr: >-
+          vars.inject_console
+            ? [{"expect": "console> ", "send": "status " + vars.workspace, "newline": true}]
+            : []
+
+  # `terminal` recolors and retitles the OUTER terminal while the user drives the
+  # child, so a production console is visually unmistakable. It requires
+  # tty: true plus user handoff, which with `interactions` means interact: true.
+  # Guarded because handoff needs a real interactive terminal.
+  - id: production_console
+    type: shell
+    if: vars.handoff
+    with:
+      command: sh
+      args: ["-c", "printf 'Login: '; read -r u; printf '\\nyou now have the console, type exit\\n'; exec sh"]
+      tty: true
+      interactions:
+        - expect: 'Login: '
+          send: "{{ .vars.username }}"
+          newline: true
+      interact: true
+      terminal:
+        background: "rgb(30, 30, 46)"
+        foreground: white
+        title: "Production console - {{ .vars.workspace }}"

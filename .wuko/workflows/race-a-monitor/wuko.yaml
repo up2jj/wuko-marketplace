@@ -1,0 +1,110 @@
+version: 1
+package_version: 1.0.0
+name: race-a-monitor
+description: Race a sequential body against a named monitor and publish the recorded winner
+
+# cancel_on starts its body and every monitor concurrently from the state that
+# existed before the control. The first participant to finish wins, the rest are
+# canceled, and the complete outcome is recorded under `.steps.<id>` rather than
+# merged into the workflow.
+#
+# Here the 2s monitor beats the ~5s body, so `triggered` is true and `work` is
+# recorded as canceled. Shorten the body to see the body win instead:
+#   wuko run --file .wuko/workflows/race-a-monitor/wuko.yaml --var work_seconds=1
+
+vars:
+  work_seconds: 5
+
+# The control publishes a full result contract, so callers read it directly
+# instead of going through a `collect:` summary. Declared workflow outputs need
+# no `return` when the main flow has none; each needs a type and an Expr value.
+outputs:
+  triggered:
+    type: boolean
+    description: Whether a monitor rather than the body won the race
+    value: steps.watched_work.triggered
+  winner:
+    type: string
+    description: Winning monitor id, empty when the body won
+    value: steps.watched_work.winner.monitor
+  winner_kind:
+    type: string
+    description: Executable kind of the winner, or "body"
+    value: steps.watched_work.winner.kind
+  work_status:
+    type: string
+    description: Terminal status of the body's long-running step
+    value: steps.watched_work.steps.work.status
+  artifact:
+    type: string
+    description: Body variable, read from the isolated body scope
+    value: steps.watched_work.vars.artifact
+
+steps:
+  - id: watched_work
+    # The parent needs an `id`, every monitor needs a unique `id`, and
+    # `timeout:`/`retry:` are rejected on the parent - bound participants instead.
+    cancel_on:
+      monitors:
+        - id: budget_elapsed
+          type: wait
+          with:
+            duration: 2s
+
+      steps:
+        - id: prepare
+          type: set
+          with:
+            variable: artifact
+            value: dist/app.tar
+
+        - id: work
+          type: shell
+          with:
+            command: sh
+            args:
+              - "-c"
+              - "i=1; while [ \"$i\" -le {{ .vars.work_seconds }} ]; do printf 'working %s/%s\\n' \"$i\" {{ .vars.work_seconds }}; sleep 1; i=$((i+1)); done"
+
+  # `triggered` is just `winner.monitor != ""`. The parent itself succeeds even
+  # when a participant fails or times out - that outcome is data, not an error.
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "triggered=%s winner=%s kind=%s work=%s\n"
+        - "{{ .steps.watched_work.triggered }}"
+        - "{{ .steps.watched_work.winner.monitor }}"
+        - "{{ .steps.watched_work.winner.kind }}"
+        - "{{ .steps.watched_work.steps.work.status }}"
+
+  # Body variables never escape to the outer `.vars`; they live under the parent.
+  - id: artifact
+    type: shell
+    with:
+      command: printf
+      args: ["body committed artifact=%s\n", "{{ .steps.watched_work.vars.artifact }}"]
+
+  - id: monitor_record
+    type: shell
+    with:
+      command: printf
+      args:
+        - "monitor budget_elapsed: kind=%s status=%s\n"
+        - "{{ .steps.watched_work.monitors.budget_elapsed.kind }}"
+        - "{{ .steps.watched_work.monitors.budget_elapsed.status }}"
+
+  - id: ran_out_of_budget
+    type: shell
+    if: steps.watched_work.triggered
+    with:
+      command: printf
+      args: ["the budget monitor stopped the body before it finished\n"]
+
+  - id: finished_in_budget
+    type: shell
+    if: steps.watched_work.triggered == false
+    with:
+      command: printf
+      args: ["the body finished inside its budget\n"]

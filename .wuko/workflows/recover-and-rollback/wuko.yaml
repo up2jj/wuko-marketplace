@@ -1,0 +1,89 @@
+version: 1
+package_version: 1.0.0
+name: recover-and-rollback
+description: Recover from a failing step with the try/catch control and the structured error root
+
+# try/catch turns a failed sequential block into a recoverable one. The whole
+# result lands under a single `.steps.<id>` path instead of leaking child IDs
+# into the workflow, so nothing downstream has to know how recovery happened.
+#
+# Run it twice to see both paths:
+#   wuko run --file .wuko/workflows/recover-and-rollback/wuko.yaml
+#   wuko run --file .wuko/workflows/recover-and-rollback/wuko.yaml --var fail_deploy=false
+
+vars:
+  fail_deploy: true
+
+steps:
+  - id: deployment
+    # The parent needs an `id`. It accepts `if:`, but `timeout:` and `retry:`
+    # are rejected here - bound the children instead.
+    try:
+      steps:
+        - id: build
+          type: shell
+          with:
+            command: printf
+            args: ["built artifact\n"]
+
+        - id: deploy
+          type: shell
+          with:
+            command: sh
+            args:
+              - "-c"
+              - >-
+                {{ if .vars.fail_deploy }}printf 'deploy rejected by the release gate\n' >&2; exit 3{{ else }}printf 'deployed\n'{{ end }}
+
+    catch:
+      # The `error` root exists only while catch runs. Prefer `status`, `step`,
+      # and `type` in conditions; `message` is informational and may change.
+      steps:
+        - id: rollback
+          type: shell
+          with:
+            command: printf
+            args:
+              - "rolling back: step %s (%s) ended %s\n"
+              - "{{ .error.step }}"
+              - "{{ .error.type }}"
+              - "{{ .error.status }}"
+
+        - id: failed_step
+          type: set
+          with:
+            variable: failed_step
+            expr: error.step
+
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "recovered=%s try=%s catch=%s\n"
+        - "{{ .steps.deployment.recovered }}"
+        - "{{ .steps.deployment.try.status }}"
+        - "{{ .steps.deployment.catch.status }}"
+
+  # Child outputs stay namespaced under the parent, whichever branch produced them.
+  - id: build_output
+    type: shell
+    with:
+      command: printf
+      args:
+        - "build exited %s\n"
+        - "{{ .steps.deployment.try.steps.build.outputs.exit_code }}"
+
+  - id: notify_recovery
+    type: shell
+    if: steps.deployment.recovered
+    with:
+      command: printf
+      args: ["recovered from a failure in %s\n", "{{ .vars.failed_step }}"]
+
+  - id: notify_success
+    type: shell
+    if: steps.deployment.recovered == false
+    with:
+      command: printf
+      args: ["deployment succeeded on the first attempt\n"]

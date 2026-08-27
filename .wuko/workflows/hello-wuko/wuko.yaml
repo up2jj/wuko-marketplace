@@ -1,4 +1,5 @@
 version: 1
+package_version: 1.0.0
 name: hello-wuko
 description: Demonstrate variables and step outputs in a standalone Wuko workflow
 
