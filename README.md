@@ -32,7 +32,7 @@ Remove one with `wuko uninstall NAME`.
 | [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / unreleased |
 | [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / unreleased |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | unreleased |
-| [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr | unreleased |
+| [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | unreleased |
 
 ## Running an example without installing
 

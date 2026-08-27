@@ -28,6 +28,16 @@ steps:
       operation: title
       title: "wuko - {{ .vars.task }}"
 
+  # scope: tab labels the tab or window containing the pane. herdr has no tab
+  # equivalent of `pane rename --clear`, so every title operation reports the
+  # label it replaced through `previous_title` and finally sets it back.
+  - id: tab
+    type: multiplexer
+    with:
+      operation: title
+      scope: tab
+      title: "wuko: {{ .vars.task }}"
+
   - id: detected
     type: shell
     with:
@@ -38,6 +48,15 @@ steps:
         - "{{ .steps.label.provider }}"
         - "{{ .steps.label.operation }}"
         - "{{ .steps.label.changed }}"
+
+  - id: tab_detail
+    type: shell
+    with:
+      command: printf
+      args:
+        - "tab scope=%s previous_title=%s\n"
+        - "{{ .steps.tab.scope }}"
+        - "{{ .steps.tab.previous_title }}"
 
   - id: work
     type: shell
@@ -72,3 +91,13 @@ finally:
     if: steps.label.active
     with:
       operation: clear_title
+
+  # Restore rather than clear: the tab had a label before this run, and
+  # previous_title is what it was.
+  - id: reset_tab
+    type: multiplexer
+    if: steps.tab.active
+    with:
+      operation: title
+      scope: tab
+      title: "{{ .steps.tab.previous_title }}"

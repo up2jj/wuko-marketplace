@@ -42,8 +42,8 @@
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Label and annotate the hosting tmux, cmux, or Herdr context, degrading cleanly when there is none",
-      "source_sha256": "dc68fe74a4cf0af0c9b42616848c521bb5f97b6231432be18f0f0ae7c0bad770",
-      "sha256": "444a36e9716fcf2eea0e347fa89016a5520b7183409fa629efd13e13a5243052"
+      "source_sha256": "b88802492b85203609a2128aa23221a765c48037f3b10d1cacceeb61b7753f98",
+      "sha256": "d9ab21c8655baf813eccb99a1e38d0bbb9cba0b78ec2e033d8be540d6673b6a4"
     },
     {
       "name": "probe-exit-codes",
