@@ -1,0 +1,5 @@
+# Workflow-local run state written by the example packages (key_value stores,
+# once completions, change snapshots). Never published: `wuko marketplace build`
+# excludes the values root from every archive.
+.wuko/values/
+.wuko/workflows/*/.wuko/

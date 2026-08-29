@@ -1,0 +1,214 @@
+version: 1
+package_version: 1.0.0
+name: durable-state
+description: Keep typed state between runs with key_value expr, atomic update, defaults, and prefixes
+
+# `key_value` persists JSON-compatible values between runs. `local` stores live
+# beside the workflow under `.wuko/values/`; `global` stores live in Wuko's user
+# configuration directory. Code Wuko fetched - a remote workflow, or an action
+# pulled from a URL - has no local store and may use only `global`.
+#
+# Run it twice: the counter keeps climbing, and the second run reports the
+# reading it took before the increment.
+#
+#   wuko run --file .wuko/workflows/durable-state/wuko.yaml
+#   wuko run --file .wuko/workflows/durable-state/wuko.yaml --var reset=true
+#
+# State lands in `.wuko/values/build.json` next to this workflow. `--var
+# reset=true` clears it again.
+
+vars:
+  reset: false
+
+steps:
+  # --- typed writes ---------------------------------------------------------
+  # A template always renders to text, so `value: "{{ .vars.size }}"` would store
+  # the STRING "4096". `expr` evaluates an Expr expression and stores the result
+  # with its JSON type intact, which is what survives to the next run. `set`
+  # takes exactly one of `value` or `expr`.
+  - id: measure
+    type: shell
+    with:
+      command: printf
+      args: ["4096"]
+      stdout: capture
+
+  - id: record_size
+    type: key_value
+    with:
+      operation: set
+      scope: local
+      store: build
+      key: artifact_bytes
+      expr: int(steps.measure.stdout)
+
+  # --- read-modify-write under one lock -------------------------------------
+  # `update` reads and writes while holding the store lock, so concurrent steps
+  # and separate `wuko` runs compose instead of overwriting one another. Its
+  # `expr` additionally sees the stored value as `current` and whether the key
+  # existed as `found`. A `get` followed by a `set` releases the lock in between
+  # and cannot make that guarantee.
+  - id: count_run
+    type: key_value
+    with:
+      operation: update
+      scope: local
+      store: build
+      key: runs
+      expr: "found ? current + 1 : 1"
+      # `variable` publishes the result as `.vars.<name>` as well, so the value
+      # is read once and reused without another lookup.
+      variable: run_count
+
+  # Two updates racing inside one concurrent group still serialize correctly:
+  # each observes what the other committed rather than a stale snapshot.
+  - concurrent:
+      max_concurrency: 2
+      steps:
+        - id: bump_lint
+          type: key_value
+          with:
+            operation: update
+            scope: local
+            store: build
+            key: checks
+            expr: "found ? current + 1 : 1"
+
+        - id: bump_test
+          type: key_value
+          with:
+            operation: update
+            scope: local
+            store: build
+            key: checks
+            expr: "found ? current + 1 : 1"
+
+  # Both increments landed, so `checks` grows by two per run rather than one.
+  - id: read_checks
+    type: key_value
+    with:
+      operation: get
+      scope: local
+      store: build
+      key: checks
+      variable: checks
+
+  # --- reads never create anything ------------------------------------------
+  # `get` takes a `default` for an absent key. `get` and `list` create no files,
+  # so reading a store that was never written leaves the values directory absent.
+  - id: load_retries
+    type: key_value
+    with:
+      operation: get
+      scope: local
+      store: build
+      key: retries
+      default: 3
+      variable: retries
+
+  - id: name_artifacts
+    type: key_value
+    with:
+      operation: set
+      scope: local
+      store: build
+      key: artifact-linux
+      value: dist/app-linux.tar
+
+  - id: name_artifacts_darwin
+    type: key_value
+    with:
+      operation: set
+      scope: local
+      store: build
+      key: artifact-darwin
+      value: dist/app-darwin.tar
+
+  # `list` takes a key `prefix` and returns key-sorted `entries`.
+  - id: list_artifacts
+    type: key_value
+    with:
+      operation: list
+      scope: local
+      store: build
+      prefix: "artifact-"
+      variable: artifacts
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "run=%s checks=%s bytes=%s retries=%s artifacts=%s\n"
+        - "{{ .vars.run_count }}"
+        - "{{ .vars.checks }}"
+        - "{{ .steps.record_size.value }}"
+        - "{{ .vars.retries }}"
+        - "{{ len .vars.artifacts }}"
+
+  # `update` reports the `found` state it replaced and whether it `changed`;
+  # a first run replaced nothing.
+  - id: first_run
+    type: shell
+    if: steps.count_run.found == false
+    with:
+      command: printf
+      args: ["this was the first recorded run\n"]
+
+  - id: repeat_run
+    type: shell
+    if: steps.count_run.found
+    with:
+      command: printf
+      args: ["run %s, and the update replaced an existing key (changed=%s)\n", "{{ .vars.run_count }}", "{{ .steps.count_run.changed }}"]
+
+  # --- targeted and wholesale removal ---------------------------------------
+  - id: drop_legacy
+    type: key_value
+    with:
+      operation: delete
+      scope: local
+      store: build
+      key: legacy-artifact
+
+  # Each operation accepts only the fields it uses, so a `key` on a `list` or a
+  # `prefix` on a `get` fails when the workflow loads, not halfway through a run.
+  #
+  # The store names `changed`, `once`, and `picker` are reserved: Wuko keeps
+  # change snapshots, idempotency outcomes, and workflow picker history there,
+  # and neither a workflow nor Lua's `wuko.kv` API may open them. Stores are
+  # atomic plain JSON, not encrypted secret vaults - keep credentials elsewhere.
+  - id: reset_build_state
+    type: key_value
+    if: vars.reset
+    with:
+      operation: clear
+      scope: local
+      store: build
+
+  - id: reset_report
+    type: shell
+    if: vars.reset
+    with:
+      command: printf
+      args: ["cleared %s keys\n", "{{ .steps.reset_build_state.cleared }}"]
+
+# Marketplace lifecycle hooks are ordinary step lists, and they are validated
+# with the rest of the workflow rather than at the moment they fire. `install`
+# runs from the staged package root before the package directory is committed;
+# `uninstall` runs from the installed directory after confirmation and before
+# removal, which makes it the right place to drop the state this workflow kept.
+install:
+  - id: announce
+    type: shell
+    with:
+      command: printf
+      args: ["durable-state installed - run it twice to watch the counter climb\n"]
+
+uninstall:
+  - id: forget_state
+    type: key_value
+    with:
+      operation: clear
+      scope: local
+      store: build

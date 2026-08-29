@@ -1,0 +1,232 @@
+version: 1
+package_version: 1.0.0
+name: structured-edit
+description: Mutate JSON, YAML, and TOML with RFC 9535 JSONPath while preserving comments and types
+
+# `edit` replaces `sed`-ing structured files. Nodes are selected with RFC 9535
+# JSONPath, the format is inferred from the extension, unrelated comments and
+# formatting survive, and the rewrite is installed atomically.
+#
+# The workflow edits only files it created in its own temp directory, so it is
+# safe to run anywhere and leaves nothing behind.
+#
+#   wuko run --file .wuko/workflows/structured-edit/wuko.yaml
+#   wuko run --file .wuko/workflows/structured-edit/wuko.yaml --var scale=3
+
+vars:
+  scale: 1
+
+steps:
+  - id: workspace
+    type: temp
+    with:
+      kind: directory
+      pattern: wuko-edit-*
+
+  - id: services_file
+    type: file
+    with:
+      operation: write
+      overwrite: true
+      path: "{{ .steps.workspace.path }}/services.yaml"
+      content: |
+        # Deployment topology. This comment survives every edit below.
+        services:
+          - name: api        # so does this one
+            runtime: node
+            replicas: 2
+          - name: cache
+            runtime: redis
+            replicas: 1
+          - name: worker
+            runtime: node
+            replicas: 4
+
+  # --- select many, compute each replacement from its own previous value ---
+  # `expr` is evaluated once per selected node against the ORIGINAL document
+  # snapshot, so an earlier rewrite can never feed a later one. Besides the
+  # usual Expr roots it sees `current`, the normalized `path`, and the
+  # zero-based match `index`. Use exactly one of `value` or `expr`.
+  - id: scale_node_services
+    type: edit
+    with:
+      operation: set
+      from:
+        file: "{{ .steps.workspace.path }}/services.yaml"
+      path: "$.services[?@.runtime == 'node'].replicas"
+      expr: current + vars.scale
+      # `result` defaults to `one`, which requires exactly one match.
+      result: all
+
+  - id: scaled
+    type: shell
+    with:
+      command: printf
+      args:
+        - "matched=%s changed=%s changed_count=%s first_path=%s\n"
+        - "{{ .steps.scale_node_services.count }}"
+        - "{{ .steps.scale_node_services.changed }}"
+        - "{{ .steps.scale_node_services.changed_count }}"
+        - "{{ index .steps.scale_node_services.paths 0 }}"
+
+  # --- array mutations: append, and insert relative to a matched element ---
+  - id: append_service
+    type: edit
+    with:
+      operation: append
+      from:
+        file: "{{ .steps.workspace.path }}/services.yaml"
+      path: $.services
+      value: {name: scheduler, runtime: node, replicas: 1}
+
+  - id: insert_before_worker
+    type: edit
+    with:
+      operation: insert
+      from:
+        file: "{{ .steps.workspace.path }}/services.yaml"
+      # Insertions and deletions are applied in location-safe order, so one edit
+      # never shifts a later selected target. Overlapping locations are rejected.
+      path: "$.services[?@.name == 'worker']"
+      position: before
+      value: {name: gateway, runtime: envoy, replicas: 2}
+
+  # --- create a key, and the map parents it needs ---
+  # `missing: create` is available only for `set`, needs a singular path whose
+  # final selector is a key, and requires any array index to already exist.
+  - id: add_limits
+    type: edit
+    with:
+      operation: set
+      from:
+        file: "{{ .steps.workspace.path }}/services.yaml"
+      path: $.defaults.limits.memory
+      value: 512Mi
+      missing: create
+
+  - id: show_services
+    type: shell
+    with:
+      command: cat
+      args: ["{{ .steps.workspace.path }}/services.yaml"]
+
+  # --- TOML keeps its own types and escapes ---
+  - id: config_file
+    type: file
+    with:
+      operation: write
+      overwrite: true
+      path: "{{ .steps.workspace.path }}/config.toml"
+      content: |
+        # Server settings.
+        [server]
+        bind = "127.0.0.1"
+        port = 8080
+        timeout = 30.0
+
+        [retired]
+        legacy = true
+
+  - id: rename_bind
+    type: edit
+    with:
+      operation: rename
+      from:
+        file: "{{ .steps.workspace.path }}/config.toml"
+      path: $.server.bind
+      # Renaming onto an existing destination key is an error, never a silent
+      # overwrite. Members of a TOML *inline* table cannot be edited one by one;
+      # replace the whole value with `set`, or promote it to a table header.
+      name: address
+
+  - id: merge_defaults
+    type: edit
+    with:
+      operation: merge
+      from:
+        file: "{{ .steps.workspace.path }}/config.toml"
+      path: $.server
+      # Deep merge: nested maps merge, arrays and other leaves replace. Keys the
+      # merge adds are written in sorted order, so the run is reproducible.
+      value:
+        max_connections: 256
+        timeout: 45.0
+
+  # Deleting the last member rewrites the table as an empty collection rather
+  # than leaving `[retired]` introducing nothing.
+  - id: drop_retired
+    type: edit
+    with:
+      operation: delete
+      from:
+        file: "{{ .steps.workspace.path }}/config.toml"
+      path: $.retired.legacy
+
+  - id: show_config
+    type: shell
+    with:
+      command: cat
+      args: ["{{ .steps.workspace.path }}/config.toml"]
+
+  # --- non-file sources are cloned, never mutated ---
+  # A `var` or `expr` source leaves the original untouched and returns the whole
+  # transformed document as `.steps.<id>.value`; use `set` to keep it.
+  - id: deployment
+    type: set
+    with:
+      variable: deployment
+      expr: '{"spec": {"replicas": 2, "labels": {"tier": "web"}}}'
+
+  - id: adjusted
+    type: edit
+    with:
+      operation: set
+      from:
+        var: deployment
+      path: $.spec.replicas
+      expr: current + 1
+
+  - id: labelled
+    type: edit
+    with:
+      operation: merge
+      from:
+        expr: steps.adjusted.value
+      path: $.spec.labels
+      value: {managed-by: wuko}
+
+  - id: save_adjusted
+    type: set
+    with:
+      variable: deployment
+      expr: steps.labelled.value
+
+  - id: show_variable
+    type: shell
+    with:
+      command: printf
+      args:
+        - "original replicas=%s edited replicas=%s tier=%s managed-by=%s\n"
+        - "2"
+        - "{{ .vars.deployment.spec.replicas }}"
+        - "{{ .vars.deployment.spec.labels.tier }}"
+        - '{{ index .vars.deployment.spec.labels "managed-by" }}'
+
+  # --- a path that matches nothing ---
+  # A missing path fails by default. `missing: ignore` makes it a successful
+  # no-op: the expression is not evaluated and a file is not rewritten.
+  - id: optional_edit
+    type: edit
+    with:
+      operation: set
+      from:
+        var: deployment
+      path: $.spec.nodeSelector.zone
+      value: eu-central-1a
+      missing: ignore
+
+  - id: optional_report
+    type: shell
+    with:
+      command: printf
+      args: ["optional edit matched=%s changed=%s\n", "{{ .steps.optional_edit.count }}", "{{ .steps.optional_edit.changed }}"]

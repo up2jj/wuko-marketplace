@@ -1,0 +1,128 @@
+version: 1
+package_version: 1.0.0
+name: concurrent-dag
+description: Order concurrent children with sibling needs edges and read committed ancestor state
+
+# A concurrent group used to be a flat fan-out: every child started from the
+# snapshot taken at group entry and none could see another. `needs` turns the
+# same group into a bounded DAG. Roots still start together; a child with
+# `needs` waits for those siblings and additionally reads the sub-state they
+# committed - their outputs and their variable writes.
+#
+#   wuko run --file .wuko/workflows/concurrent-dag/wuko.yaml
+#   wuko run --file .wuko/workflows/concurrent-dag/wuko.yaml --var run_integration=false
+#   wuko run --file .wuko/workflows/concurrent-dag/wuko.yaml --var break_unit=true
+#
+# `wuko tree --file ...` prints the declared shape; the DAG is resolved at run
+# time, so watch the reporter to see `lint` and `unit` overlap.
+
+vars:
+  run_integration: true
+  break_unit: false
+
+steps:
+  # Committed before the group, so every child sees it in the entry snapshot.
+  - id: revision
+    type: set
+    with:
+      variable: revision
+      value: 9f2c1ab
+
+  - concurrent:
+      # `needs` bounds ordering; `max_concurrency` bounds width. 1-100, default 4.
+      max_concurrency: 4
+      timeout: 2m
+      # A failed, canceled, or timed-out child skips its descendants under either
+      # policy. `fail_fast: true` additionally cancels running siblings and stops
+      # admitting new independent work; `false` lets independent branches finish.
+      fail_fast: true
+      steps:
+        # --- roots -------------------------------------------------------
+        # No `needs`, so both are admitted immediately and see only the
+        # group-entry snapshot. Neither can read the other.
+        - id: deps
+          type: shell
+          with:
+            command: sh
+            args: ["-c", "printf 'resolving modules for %s\\n' {{ .vars.revision }} >&2; printf 'api web worker'"]
+            stdout: capture
+
+        - id: toolchain
+          type: set
+          with:
+            variable: toolchain
+            value: go1.26
+
+        # --- one edge ----------------------------------------------------
+        # `lint` reads `deps`, which is a direct sibling. Forward references are
+        # legal too; unknown, duplicate, self-referential, and cyclic edges all
+        # fail validation before anything runs. Referencing `.vars.toolchain`
+        # here would be rejected up front: that variable is only reachable
+        # through an edge `lint` does not declare.
+        - id: lint
+          type: shell
+          needs: [deps]
+          with:
+            command: printf
+            args: ["linting %s\n", "{{ .steps.deps.stdout }}"]
+
+        # --- two edges, merged in dependency then declaration order --------
+        # `unit` sees `deps` and `toolchain`, but never `lint`: unrelated
+        # siblings stay invisible even after they succeed.
+        - id: unit
+          type: shell
+          needs: [deps, toolchain]
+          retry:
+            max_attempts: 2
+          with:
+            command: sh
+            args:
+              - "-c"
+              - "printf 'testing %s on %s\\n' '{{ .steps.deps.stdout }}' '{{ .vars.toolchain }}'; {{ if .vars.break_unit }}exit 1{{ end }}"
+
+        # --- a skipped prerequisite still satisfies its edge ---------------
+        # With --var run_integration=false this child is condition-skipped. It
+        # contributes no state, but `package` is not skipped with it.
+        - id: integration
+          type: shell
+          needs: [deps]
+          if: vars.run_integration
+          with:
+            command: printf
+            args: ["integration suite for %s\n", "{{ .vars.revision }}"]
+
+        # --- the join ------------------------------------------------------
+        # Transitive ancestors: lint, unit, integration, deps, toolchain.
+        - id: package
+          type: shell
+          needs: [lint, unit, integration]
+          with:
+            command: printf
+            args:
+              - "packaging %s (%s) after lint=%s unit=%s\n"
+              - "{{ .vars.revision }}"
+              - "{{ .vars.toolchain }}"
+              - "{{ .steps.lint.exit_code }}"
+              - "{{ .steps.unit.exit_code }}"
+
+  # Child results and variables are committed to the surrounding namespace in
+  # declaration order, and only after the whole group succeeds. Variable
+  # conflicts - including between an ancestor and its descendant - are still
+  # rejected at that join, so no two children may write the same variable.
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "revision=%s toolchain=%s deps=%s package=%s\n"
+        - "{{ .vars.revision }}"
+        - "{{ .vars.toolchain }}"
+        - "{{ .steps.deps.exit_code }}"
+        - "{{ .steps.package.exit_code }}"
+
+  - id: integration_skipped
+    type: shell
+    if: vars.run_integration == false
+    with:
+      command: printf
+      args: ["integration was skipped, yet package still ran\n"]

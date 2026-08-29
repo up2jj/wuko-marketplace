@@ -26,13 +26,19 @@ Remove one with `wuko uninstall NAME`.
 | Package | Demonstrates | Since |
 | --- | --- | --- |
 | [`hello-wuko`](.wuko/workflows/hello-wuko/wuko.yaml) | Variables and step outputs — the smallest useful workflow | — |
-| [`recover-and-rollback`](.wuko/workflows/recover-and-rollback/wuko.yaml) | The `try`/`catch` control, the structured `error` root, and `recovered` | unreleased |
-| [`race-a-monitor`](.wuko/workflows/race-a-monitor/wuko.yaml) | The `cancel_on` control, its result contract, and workflow-level `outputs:` | unreleased |
+| [`recover-and-rollback`](.wuko/workflows/recover-and-rollback/wuko.yaml) | The `try`/`catch` control, the structured `error` root, and `recovered` | v0.11.0 |
+| [`race-a-monitor`](.wuko/workflows/race-a-monitor/wuko.yaml) | The `cancel_on` control, its result contract, and workflow-level `outputs:` | v0.11.0 |
 | [`probe-exit-codes`](.wuko/workflows/probe-exit-codes/wuko.yaml) | `shell.allowed_exit_codes` plus `stdout`/`stderr` capture policies | v0.9.0 |
-| [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / unreleased |
-| [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / unreleased |
-| [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | unreleased |
-| [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | unreleased |
+| [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / v0.11.0 |
+| [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / v0.11.0 |
+| [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
+| [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
+| [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | unreleased |
+| [`scoped-environments`](.wuko/workflows/scoped-environments/wuko.yaml) | `env:` blocks: nesting, restoration on exit, and what `defer` and `finally` see | unreleased |
+| [`structured-edit`](.wuko/workflows/structured-edit/wuko.yaml) | The `edit` step: JSONPath selection over JSON, YAML, and TOML with comments preserved | unreleased |
+| [`durable-state`](.wuko/workflows/durable-state/wuko.yaml) | `key_value` `expr`, atomic `update`, `variable`, `default`, `prefix`, and `clear` | unreleased |
+| [`run-once`](.wuko/workflows/run-once/wuko.yaml) | `once` blocks: keyed idempotency, replayed results, and `on_busy: wait` | unreleased |
+| [`recordable-time`](.wuko/workflows/recordable-time/wuko.yaml) | The `time` step, `workflow.timezone`, and the pure `parseTime`/`addTime`/`formatTime` helpers | unreleased |
 
 ## Running an example without installing
 
@@ -54,7 +60,39 @@ wuko run --file .wuko/workflows/race-a-monitor/wuko.yaml --var work_seconds=1
 
 # grep matches, so the probe exits 0 instead of 1
 wuko run --file .wuko/workflows/probe-exit-codes/wuko.yaml --var needle=alpha
+
+# Skip a prerequisite, then fail one and watch only its descendants skip
+wuko run --file .wuko/workflows/concurrent-dag/wuko.yaml --var run_integration=false
+wuko run --file .wuko/workflows/concurrent-dag/wuko.yaml --var break_unit=true
+
+# Change the overlaid GOOS for the whole scoped block
+wuko run --file .wuko/workflows/scoped-environments/wuko.yaml --var target=darwin
+
+# Scale every matched node by 3 instead of 1
+wuko run --file .wuko/workflows/structured-edit/wuko.yaml --var scale=3
 ```
+
+Three packages keep state between runs, so run them twice:
+
+```sh
+# The counter climbs; --var reset=true clears the store again
+wuko run --file .wuko/workflows/durable-state/wuko.yaml
+wuko run --file .wuko/workflows/durable-state/wuko.yaml
+wuko run --file .wuko/workflows/durable-state/wuko.yaml --var reset=true
+
+# The second run does no work but republishes the recorded result;
+# a new key makes it real work again, and a fresh race key reruns the race
+wuko run --file .wuko/workflows/run-once/wuko.yaml
+wuko run --file .wuko/workflows/run-once/wuko.yaml
+wuko run --file .wuko/workflows/run-once/wuko.yaml --var version=3 --var race_key=take-2
+
+# Pin the captured clock and the whole run becomes reproducible
+wuko run --file .wuko/workflows/recordable-time/wuko.yaml
+wuko run --file .wuko/workflows/recordable-time/wuko.yaml --var stamp=2026-08-29T09:15:00Z
+```
+
+`durable-state` and `run-once` write to `.wuko/values/` beside the workflow. `structured-edit`
+edits only files it creates in its own temp directory.
 
 `choice-and-table` prompts. Supply both values to run it non-interactively:
 
@@ -70,10 +108,20 @@ file-backed terminal. Its last step hands the console to you and needs a real te
 wuko run --file .wuko/workflows/scripted-pty/wuko.yaml --var handoff=true
 ```
 
-## Two features with no YAML surface
+## Changes with no package of their own
 
-Not every recent addition is something a workflow file can declare, so neither has a package:
+Not every recent addition is something a workflow file can declare, so these have no package:
 
+- **Static data reference validation.** Variable and step references in templates are now checked
+  before any step is constructed, not when the consuming step starts. A variable must be declared
+  under `vars:`, supplied by the invocation, or written by an earlier step that names what it
+  assigns; a step ID must be visible where the template sits. `concurrent-dag` relies on this —
+  reading a variable that is only reachable through a `needs` edge the child does not declare fails
+  up front. `lua` and `import_vars` name their variables only at run time and therefore end
+  variable checking for the steps after them. Environment names are deliberately *not* checked,
+  because the effective environment inherits the host process.
+- **No clock outside the `time` step.** Expr's `now()` builtin is disabled and fails to compile
+  with `unknown name now`. `recordable-time` shows the replacement.
 - **The `multiplexer` reporter.** `wuko run <name> --reporter plain --reporter multiplexer`
   animates root progress in the detected tmux, cmux, or Herdr title, rendering frames such as
   `⠋ check · 3/8 · test` and leaving a final `✓`, `✗`, `■`, or `⏱`. It is a no-op without a

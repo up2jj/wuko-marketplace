@@ -1,0 +1,139 @@
+version: 1
+package_version: 1.0.0
+name: scoped-environments
+description: Overlay an environment on a block of steps, nest overrides, and restore on exit
+
+# Setting `env:` on every step that needs the same overlay is noise, and setting
+# it workflow-wide leaks it into steps that should not see it. An `env:` block
+# with `steps:` scopes the overlay to a subtree instead.
+#
+# The block is transparent: it has no `id`, no outputs, and no line of its own
+# in progress or run statistics - only its executable descendants appear.
+#
+#   wuko run --file .wuko/workflows/scoped-environments/wuko.yaml
+#   wuko run --file .wuko/workflows/scoped-environments/wuko.yaml --var target=darwin
+#   wuko tree --file .wuko/workflows/scoped-environments/wuko.yaml
+
+vars:
+  target: linux
+
+# Workflow-level env is the baseline the blocks overlay.
+env:
+  BUILD_PROFILE: debug
+  CGO_ENABLED: "1"
+
+steps:
+  # Env names are deliberately not checked when the workflow loads - the
+  # effective environment inherits the host process, so the same file would
+  # validate on one machine and fail on another. Rendering is still strict, so
+  # test presence with `hasKey` rather than reading a key that may not exist.
+  - id: baseline
+    type: shell
+    with:
+      command: printf
+      args:
+        - "baseline profile=%s cgo=%s goos_set=%s\n"
+        - "{{ .env.BUILD_PROFILE }}"
+        - "{{ .env.CGO_ENABLED }}"
+        - '{{ hasKey "GOOS" .env }}'
+
+  - id: prepare
+    type: set
+    with:
+      variable: version
+      value: 2.4.0
+
+  # Values are rendered together when the block is entered, against the
+  # enclosing environment and everything earlier sequential steps committed.
+  # Entries in the same block cannot refer to one another - RELEASE below
+  # cannot be read by CACHE_ROOT.
+  - env:
+      GOOS: "{{ .vars.target }}"
+      CGO_ENABLED: "0"
+      RELEASE: "{{ .vars.version }}"
+      CACHE_ROOT: "{{ .env.HOME }}/.cache/wuko"
+    steps:
+      - id: build
+        type: shell
+        with:
+          command: printf
+          args:
+            - "build goos=%s cgo=%s release=%s profile=%s\n"
+            - "{{ .env.GOOS }}"
+            - "{{ .env.CGO_ENABLED }}"
+            - "{{ .env.RELEASE }}"
+            # Keys the block does not set stay inherited.
+            - "{{ .env.BUILD_PROFILE }}"
+
+      # The overlay reaches nested blocks, conditions, and controls alike.
+      - env:
+          BUILD_PROFILE: release
+        steps:
+          - id: optimized
+            type: shell
+            with:
+              command: printf
+              args:
+                - "nested profile=%s still goos=%s\n"
+                - "{{ .env.BUILD_PROFILE }}"
+                - "{{ .env.GOOS }}"
+
+          # A `defer` attached to a successful child keeps the environment that
+          # was active when the child ran, even though the cleanup itself runs
+          # after both blocks have already exited.
+          - id: staged
+            type: shell
+            with:
+              command: printf
+              args: ["staging artifacts under %s\n", "{{ .env.CACHE_ROOT }}"]
+            defer:
+              - id: clear_stage
+                type: shell
+                with:
+                  command: printf
+                  args: ["deferred cleanup still sees profile=%s\n", "{{ .env.BUILD_PROFILE }}"]
+
+      # Independent concurrent branches receive independent snapshots of the
+      # overlay; neither can mutate what the other sees. `env` is a block, never
+      # a field on an ordinary step, so each branch nests one to add its own key.
+      - concurrent:
+          max_concurrency: 2
+          steps:
+            - env:
+                GOARCH: amd64
+              steps:
+                - id: check_amd64
+                  type: shell
+                  with:
+                    command: printf
+                    args: ["check %s/%s\n", "{{ .env.GOOS }}", "{{ .env.GOARCH }}"]
+
+            - env:
+                GOARCH: arm64
+              steps:
+                - id: check_arm64
+                  type: shell
+                  with:
+                    command: printf
+                    args: ["check %s/%s\n", "{{ .env.GOOS }}", "{{ .env.GOARCH }}"]
+
+  # The previous environment is restored when the block exits - after success,
+  # failure, cancellation, or an early `return` alike. Env blocks overlay keys;
+  # they never unset an inherited one, so GOOS is simply gone again here.
+  - id: restored
+    type: shell
+    with:
+      command: printf
+      args:
+        - "restored profile=%s cgo=%s goos_set=%s\n"
+        - "{{ .env.BUILD_PROFILE }}"
+        - "{{ .env.CGO_ENABLED }}"
+        - '{{ hasKey "GOOS" .env }}'
+
+# `finally` stays outside every env block, so it sees the workflow environment.
+finally:
+  - id: teardown
+    type: shell
+    with:
+      command: printf
+      args: ["finally profile=%s\n", "{{ .env.BUILD_PROFILE }}"]

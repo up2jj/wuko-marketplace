@@ -13,6 +13,28 @@
       "sha256": "110f96c6c784cee158b484417901e4aa223d94a5385ec9a06405494acb817a06"
     },
     {
+      "name": "concurrent-dag",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/concurrent-dag",
+      "path": "packages/concurrent-dag.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Order concurrent children with sibling needs edges and read committed ancestor state",
+      "source_sha256": "459117093b5fc2b94804a43693971caa8df9002f6e13370490f1741fd314d6ab",
+      "sha256": "2230eac7ec78b970b4a98da2f63439f7069b35a707e20e5184fb83d99c013611"
+    },
+    {
+      "name": "durable-state",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/durable-state",
+      "path": "packages/durable-state.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Keep typed state between runs with key_value expr, atomic update, defaults, and prefixes",
+      "source_sha256": "f14cebcd8f08658ec8180cfe48cc71c6a07c3b1b98859829bfb2c51770cddf17",
+      "sha256": "ac4a2d20c363a0b9663b4ffd02159ffa085c8a3a0c852ce733edf9d9b3524c98"
+    },
+    {
       "name": "hello-wuko",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/hello-wuko",
@@ -68,6 +90,17 @@
       "sha256": "c1db4318bdad1b5004d045dad2f8ec90db1000a71bbd32d29edbe4fe1b631c90"
     },
     {
+      "name": "recordable-time",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/recordable-time",
+      "path": "packages/recordable-time.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Capture time through the one step allowed to read the clock, then transform it purely",
+      "source_sha256": "1a0d5a324b6c6dac60a37da24569b82b48f31d3918636c5bb9ee9d03bed1f2f9",
+      "sha256": "f8c0b0298f4b97be8db6b64b2a6f7e0476828479f65c03bb58cc9c1e763ded76"
+    },
+    {
       "name": "recover-and-rollback",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/recover-and-rollback",
@@ -79,6 +112,28 @@
       "sha256": "d0316dbca9a30bcc84f1c0964ce5aa0accefd39c84a6c4010681165f36dff55a"
     },
     {
+      "name": "run-once",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/run-once",
+      "path": "packages/run-once.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Make a block idempotent across runs with a keyed once claim and replayed results",
+      "source_sha256": "e44c95401332fbd341ac7402f5ba83496513d5b340940241fc8682f152e911d3",
+      "sha256": "c2dd2a99f1b5b6b60482dac0c047b2bf0ea822ace1f444dc5d109e3595f33773"
+    },
+    {
+      "name": "scoped-environments",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/scoped-environments",
+      "path": "packages/scoped-environments.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Overlay an environment on a block of steps, nest overrides, and restore on exit",
+      "source_sha256": "342c6f3b021f5b8745199ae3f009df00b6f88c9d551bb70dafa7ac9205425ecc",
+      "sha256": "097b5a842489a53aa46ab4f0fc806adafa12621d92b327e12adc1ad46f3011d4"
+    },
+    {
       "name": "scripted-pty",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/scripted-pty",
@@ -88,6 +143,17 @@
       "description": "Drive an interactive PTY program with scripted interactions, dynamic sends, and console styling",
       "source_sha256": "aa0f505bd634a4f684f6d8e175f9c3cbc464f5b4e4064fabb956f975767996cc",
       "sha256": "a026901ea20b6201a8c4ea000ca45a69cae499e2827b229b2a83b7b3689774bb"
+    },
+    {
+      "name": "structured-edit",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/structured-edit",
+      "path": "packages/structured-edit.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Mutate JSON, YAML, and TOML with RFC 9535 JSONPath while preserving comments and types",
+      "source_sha256": "e0c485242192c39fdc0c8e29dc5da0cd91765178a09961b43962202d58da3390",
+      "sha256": "583dd51b70a97798db2138cd9f397c5206073bd2fb5834eb36fbd1d93e7fbdec"
     }
   ]
 }

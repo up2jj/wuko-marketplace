@@ -1,0 +1,153 @@
+version: 1
+package_version: 1.0.0
+name: recordable-time
+description: Capture time through the one step allowed to read the clock, then transform it purely
+
+# Wuko has no clock function in templates, Expr, or Lua - Expr's own `now()` is
+# deliberately disabled and fails to compile with `unknown name now`. The `time`
+# step is the only thing that may read the clock, which makes every run
+# recordable and overridable. Everything downstream is a pure transformation of
+# the captured string.
+#
+#   wuko run --file .wuko/workflows/recordable-time/wuko.yaml
+#
+# Pin the capture and the whole run becomes reproducible - the supplied string
+# is published unchanged and the clock is never consulted:
+#
+#   wuko run --file .wuko/workflows/recordable-time/wuko.yaml --var stamp=2026-08-29T09:15:00Z
+
+# The workflow timezone drives scheduled runs AND explicit time operations. It
+# may be declared without `cron`. Reachable as `.workflow.timezone` in
+# templates, `workflow.timezone` in Expr, and `wuko.workflow.timezone` in Lua.
+timezone: Europe/Warsaw
+
+steps:
+  # `variable` defaults to the step ID, so this is both `.steps.stamp.value` and
+  # `.vars.stamp`. Without `value` the step captures the clock once per attempt.
+  # Only a value supplied BEFORE the run pins it - via `--var` or the top-level
+  # `vars:`. A variable a step writes during the run never does, so a `time`
+  # step inside a `loop` still captures the clock on every iteration.
+  - id: stamp
+    type: time
+    with:
+      format: "2006-01-02T15:04:05Z07:00"
+
+  # Parse, convert, adjust, and format in one step. `parse_format` may only be
+  # used with `value` and defaults to RFC3339Nano, as does `format`. Calendar
+  # years, months, and days are applied in the target location BEFORE the exact
+  # Go duration, so calendar arithmetic follows daylight-saving transitions.
+  # Negative adjustments subtract.
+  - id: release_date
+    type: time
+    with:
+      value: "2026-08-29T10:00:00Z"
+      parse_format: "2006-01-02T15:04:05Z07:00"
+      # Timezone precedence: the step's own, then the workflow's, then the
+      # machine's local zone.
+      timezone: America/New_York
+      add: {years: 1, months: -2, days: 3, duration: 90m}
+      format: "2006-01-02 15:04 MST"
+      variable: published_date
+
+  # --- pure helpers: parseTime, addTime, formatTime -------------------------
+  # They never read the clock and only transform their explicit arguments.
+  # `addTime` needs at least one of years/months/days/duration and rejects
+  # unknown options. A blank timezone keeps the instant's own zone, so
+  # `.workflow.timezone` passes straight through even when none is declared.
+  - id: window_opens
+    type: set
+    with:
+      variable: window_opens
+      expr: 'addTime(vars.stamp, {"days": 1, "timezone": workflow.timezone})'
+
+  - id: window_closes
+    type: set
+    with:
+      variable: window_closes
+      expr: 'addTime(vars.window_opens, {"days": 7, "duration": "-1s", "timezone": workflow.timezone})'
+
+  # The same helpers in Go template form. `formatTime` and `addTime` consume
+  # RFC3339 or RFC3339Nano, so custom source text must go through `parseTime`
+  # first - which also normalizes it for composition.
+  - id: announcement
+    type: set
+    with:
+      variable: announcement
+      value: >-
+        Freeze window: {{ .vars.window_opens | formatTime "Mon, January 2 15:04 MST" .workflow.timezone }}
+        through {{ .vars.window_closes | formatTime "Mon, January 2 15:04 MST" .workflow.timezone }}
+
+  - id: from_custom_text
+    type: set
+    with:
+      variable: cutoff
+      # Zone-less parsing defaults to UTC; an explicit IANA zone supplies
+      # calendar and daylight-saving semantics instead.
+      value: '{{ "29/08/2026 18:30" | parseTime "02/01/2006 15:04" .workflow.timezone }}'
+
+  # --- and in Lua, via wuko.helpers ----------------------------------------
+  - id: schedule
+    type: lua
+    with:
+      source: |
+        local h = wuko.helpers
+        local zone = wuko.workflow.timezone
+        local opens = wuko.args.opens
+
+        -- Four weekly checkpoints, each derived from the previous one.
+        local checkpoints = {}
+        local cursor = opens
+        for index = 1, 4 do
+          cursor = h.add_time(cursor, {days = 7, timezone = zone})
+          checkpoints[index] = h.format_time(cursor, "2006-01-02", zone)
+        end
+
+        wuko.output("checkpoints", checkpoints)
+        wuko.output("first", checkpoints[1])
+        wuko.output("last", checkpoints[#checkpoints])
+      args:
+        opens:
+          expr: vars.window_opens
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s\npublished=%s cutoff=%s\ncheckpoints %s .. %s\n"
+        - "{{ .vars.announcement }}"
+        - "{{ .vars.published_date }}"
+        - '{{ .vars.cutoff | formatTime "2006-01-02 15:04 MST" .workflow.timezone }}'
+        - "{{ .steps.schedule.first }}"
+        - "{{ .steps.schedule.last }}"
+
+  # A `time` step inside a repeated block captures the clock on every iteration
+  # rather than reusing the first reading, so the three collected samples differ.
+  # Only a value supplied before the run pins the step; a variable written during
+  # the run - including by an earlier iteration - never does.
+  - id: samples
+    foreach:
+      items: '["first", "second", "third"]'
+      collect: '{"label": foreach.item, "at": steps.tick.value}'
+      steps:
+        - id: tick
+          type: time
+          with:
+            variable: tick
+            format: "15:04:05.000"
+
+        - id: pause
+          type: wait
+          with:
+            duration: 200ms
+
+  - id: elapsed
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s samples: %s, %s, %s\n"
+        - "{{ .steps.samples.count }}"
+        - "{{ (index .steps.samples.results 0).at }}"
+        - "{{ (index .steps.samples.results 1).at }}"
+        - "{{ (index .steps.samples.results 2).at }}"

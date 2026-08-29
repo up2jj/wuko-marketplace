@@ -1,0 +1,177 @@
+version: 1
+package_version: 1.0.0
+name: run-once
+description: Make a block idempotent across runs with a keyed once claim and replayed results
+
+# A `once` block treats work as complete after one successful run for an
+# explicit key: local bootstrap, fixture downloads, a schema migration. The
+# first success records the block's child results and variable writes; later
+# runs report the block as skipped, execute no children, and republish exactly
+# the same data.
+#
+# Run it twice. The second run does no work but still reads the recorded
+# version, and `.vars.schema_version` is restored as if the body had run.
+#
+#   wuko run --file .wuko/workflows/run-once/wuko.yaml
+#   wuko run --file .wuko/workflows/run-once/wuko.yaml --var version=3
+#   wuko run --file .wuko/workflows/run-once/wuko.yaml --var race_key=take-2
+#
+# Completions land in the reserved local `once` store under `.wuko/values/`.
+# There is no expiry and no reset operation: change the key to invalidate a
+# completion. `--var version=3` does exactly that.
+
+vars:
+  version: 2
+  bootstrap: true
+  race_key: take-1
+
+steps:
+  - id: migrate
+    # An outer `if` is evaluated before persistence is even read. `once` cannot
+    # be combined with ordinary step fields or execution policies, cannot run
+    # inside cleanup, and its body may declare neither `defer` nor `return` -
+    # the body runs on a private state clone, so a `return` could not end the
+    # surrounding workflow and would be baked into the record.
+    if: vars.bootstrap
+    once:
+      # The key is rendered when execution reaches the block, so changing an
+      # input intentionally creates a new completion. Keys carry no workflow
+      # identity, so choose globally unique ones for `scope: global`.
+      key: "schema-{{ .vars.version }}"
+      # `local` stores beside the workflow; `global` in Wuko's user config
+      # directory. A directly executed remote workflow or URL action has no
+      # local store and must use `global`.
+      scope: local
+      # A second process holding the same key: `error` (the default) fails the
+      # contender immediately; `wait` waits cancelably, then replays the owner's
+      # successful result, or takes ownership if that execution failed.
+      on_busy: wait
+      steps:
+        - id: apply
+          type: shell
+          with:
+            command: sh
+            args:
+              - "-c"
+              - "printf 'applying schema %s\\n' {{ .vars.version }} >&2; printf 'schema-%s' {{ .vars.version }}"
+            stdout: capture
+
+        - id: record
+          type: set
+          with:
+            variable: schema_version
+            expr: vars.version
+
+  # Child step IDs stay private to the block: `.steps.apply` does not exist out
+  # here, only `.steps.migrate.steps.apply`. Recorded variables ARE restored
+  # into `.vars`, so downstream steps cannot tell a replay from the real thing.
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "schema_version=%s child_status=%s child_stdout=%s\n"
+        - "{{ .vars.schema_version }}"
+        - "{{ .steps.migrate.steps.apply.status }}"
+        - "{{ .steps.migrate.steps.apply.outputs.stdout }}"
+
+  # Only a completely successful body is recorded. Failure or cancellation
+  # leaves the key incomplete, so a later run tries again. Wuko cannot
+  # atomically commit arbitrary external effects with local state, so a crash
+  # after an external effect but before the record means the next run retries.
+  - id: fixtures
+    once:
+      key: fixtures-v1
+      scope: local
+      steps:
+        - id: workspace
+          type: temp
+          with:
+            kind: directory
+            pattern: wuko-fixtures-*
+
+        - id: seed
+          type: file
+          with:
+            operation: write
+            overwrite: true
+            path: "{{ .steps.workspace.path }}/seed.json"
+            content: '{"rows": 3}'
+
+        - id: count
+          type: set
+          with:
+            variable: fixture_rows
+            value: 3
+
+  - id: fixtures_report
+    type: shell
+    with:
+      command: printf
+      args: ["fixture rows=%s (seed step %s)\n", "{{ .vars.fixture_rows }}", "{{ .steps.fixtures.steps.seed.status }}"]
+
+  # --- two contenders, one key ----------------------------------------------
+  # Concurrent processes claim each key independently, and these two siblings
+  # race for the same one. The winner runs its body; the loser waits cancelably
+  # and then republishes the winner's recorded result, so both report the same
+  # payload and the work happened once. With the default `on_busy: error` the
+  # loser would fail immediately with a busy error instead.
+  #
+  # Both are replays once the key is complete - pass a fresh --var race_key to
+  # watch the race again.
+  - concurrent:
+      max_concurrency: 2
+      steps:
+        - id: claim_left
+          once:
+            key: "seed-{{ .vars.race_key }}"
+            scope: local
+            on_busy: wait
+            steps:
+              - id: seed_store
+                type: shell
+                with:
+                  command: sh
+                  args: ["-c", "sleep 1; printf 'seeded-by-left'"]
+                  stdout: capture
+
+        - id: claim_right
+          once:
+            key: "seed-{{ .vars.race_key }}"
+            scope: local
+            on_busy: wait
+            steps:
+              # The same child ID in both bodies is fine: child IDs are private
+              # to the block, so nothing collides at the join.
+              - id: seed_store
+                type: shell
+                with:
+                  command: sh
+                  args: ["-c", "sleep 1; printf 'seeded-by-right'"]
+                  stdout: capture
+
+  - id: race_report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "left=%s right=%s (identical: the loser replayed the winner)\n"
+        - "{{ .steps.claim_left.steps.seed_store.outputs.stdout }}"
+        - "{{ .steps.claim_right.steps.seed_store.outputs.stdout }}"
+
+  # Nesting `once` makes a run hold several keys at once, so two runs could
+  # claim the same keys in opposite orders. A holder publishes the key it waits
+  # on beside its claim; a contender that would close the loop is refused with
+  # the cycle named rather than blocking, and whichever side looks second is the
+  # one refused. Recursive use of the same scope and key fails instead of
+  # deadlocking. The check follows claims across scopes and across processes on
+  # the same machine, and ignores a claim whose process is gone.
+  # The `once` store is reserved, so no workflow and no Lua `wuko.kv` call can
+  # clear its own completions - a step declaring `store: once` is rejected when
+  # the workflow loads. Change the key to invalidate a completion; to start over
+  # entirely, delete `.wuko/values/once.json` by hand.
+  - id: how_to_invalidate
+    type: shell
+    with:
+      command: printf
+      args: ["invalidate by changing the key, e.g. --var version=3\n"]
