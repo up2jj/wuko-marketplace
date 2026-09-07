@@ -1,0 +1,402 @@
+version: 1
+package_version: 1.0.0
+name: git-history
+description: Read commits, branch points, history slices, and diffs as structured data instead of parsing git output
+
+# Wuko's read-only Git steps hand back typed workflow data: `git_revision` for
+# one commit, `git_merge_base` for a branch point, `git_log` for a bounded slice
+# of history, and `git_diff` / `git_diff_check` for changes. None of them fetch
+# from a remote, and none of them change the repository.
+#
+# This package is self-contained: it builds a small throwaway repository in a
+# managed temp directory and reads that, so it never touches your own history.
+#
+#   wuko run --file .wuko/workflows/git-history/wuko.yaml
+
+steps:
+  # The temp directory is managed: Wuko removes it after root cleanup, even
+  # when the run fails or is cancelled.
+  - id: repo
+    type: temp
+    with: {kind: directory, pattern: wuko-git-history-*}
+
+  # `working_directory` is a transparent scope, not a step. It moves `.run.dir`
+  # for everything nested below it - which is exactly where the Git steps run -
+  # and restores the previous directory on exit, including after a failure.
+  - working_directory: "{{ .steps.repo.path }}"
+    steps:
+      - id: init_repo
+        type: shell
+        with:
+          command: git
+          args: [init, -q, -b, main]
+
+      # --- an unborn repository is a first-class answer --------------------
+      # With no `revision`, the step defaults to HEAD and an empty repository
+      # succeeds with `found: false`, empty identities, and an `other`
+      # conventional classification. An *explicitly* configured revision that
+      # does not resolve fails instead - including an explicit `revision: HEAD`.
+      # That split lets a workflow probe a fresh repository while still
+      # treating a requested tag as required.
+      - id: unborn
+        type: git_revision
+
+      - id: report_unborn
+        type: shell
+        with:
+          command: printf
+          args:
+            - "unborn repository: found=%s sha=[%s] classification=%s\n"
+            - "{{ .steps.unborn.found }}"
+            - "{{ .steps.unborn.sha }}"
+            - "{{ .steps.unborn.conventional.classification }}"
+
+      # --- build a history worth reading -----------------------------------
+      #
+      #   A──B────────M──D        main
+      #       \      /
+      #        C1──C2            feature (merged)
+      #       \
+      #        S1──S2            spike   (never merged)
+      #
+      # The identity and signing settings are written into this throwaway
+      # repository only, so the example neither depends on nor changes your own
+      # Git configuration.
+      - id: build_history
+        type: shell
+        with:
+          command: sh
+          args:
+            - "-c"
+            - |
+              set -e
+              git config user.name "Ada Example"
+              git config user.email "ada@example.test"
+              git config commit.gpgsign false
+
+              printf 'catalog\n' > catalog.md
+              git add catalog.md
+              git commit -q -m 'chore: start the catalog'
+
+              printf 'catalog\npricing: 19.995\n' > catalog.md
+              git add catalog.md
+              git commit -q -m 'feat(catalog): add pricing' -m 'Prices are stored with full precision.'
+
+              git switch -q -c feature
+              printf 'round half up to cents\n' > pricing.md
+              git add pricing.md
+              git commit -q -m 'fix(pricing): round to whole cents'
+              printf 'round half up to cents\ncovered by table tests\n' > pricing.md
+              git add pricing.md
+              git commit -q -m 'test(pricing): cover the rounding table'
+
+              git switch -q main
+              git merge -q --no-ff -m 'Merge branch '"'"'feature'"'"'' feature
+
+              printf 'catalog\npricing: 19.995\nsee pricing.md\n' > catalog.md
+              git add catalog.md
+              git commit -q -m 'docs(catalog): link the pricing notes'
+
+              # A branch off B that was never merged - its branch point is the
+              # interesting boundary further down.
+              git switch -q -c spike main~2
+              printf 'experiment\n' > spike.md
+              git add spike.md
+              git commit -q -m 'feat(spike): sketch an experiment'
+              printf 'experiment\nsecond pass\n' > spike.md
+              git add spike.md
+              git commit -q -m 'refactor(spike): tidy the sketch'
+              git switch -q main
+
+      # --- one commit, as data ---------------------------------------------
+      # Outputs: found, sha, short_sha, subject, body, message, parents,
+      # is_merge, author, committer, and conventional. Author and committer are
+      # mailmap-aware objects with name, email, and an RFC 3339 date.
+      # `short_sha` uses Git's own unambiguous abbreviation.
+      - id: head
+        type: git_revision
+
+      - id: require_commit
+        type: assert
+        with:
+          expr: steps.head.found
+          message: The example repository should have a commit by now
+
+      # `conventional` is best-effort metadata on every commit record: a
+      # recognized Conventional Commit is `valid: true`, merge and autosquash
+      # messages carry their own classification with `valid: false`, and
+      # anything else is `other`. A non-conventional message never fails the
+      # step.
+      - id: report_head
+        type: shell
+        with:
+          command: printf
+          args:
+            - "HEAD %s by %s: [%s/%s] %s\n"
+            - "{{ .steps.head.short_sha }}"
+            - "{{ .steps.head.author.name }}"
+            - "{{ .steps.head.conventional.type }}"
+            - "{{ .steps.head.conventional.scope }}"
+            - "{{ .steps.head.subject }}"
+
+      # A branch, tag, or runtime-selected revision is peeled to its commit and
+      # returned as the full object ID in `sha`.
+      - id: merge_commit
+        type: git_revision
+        with:
+          revision: main~1
+
+      - id: report_merge
+        type: shell
+        with:
+          command: printf
+          args:
+            - "%s is_merge=%s with %s parents\n"
+            - "{{ .steps.merge_commit.short_sha }}"
+            - "{{ .steps.merge_commit.is_merge }}"
+            - "{{ len .steps.merge_commit.parents }}"
+
+      # --- the branch point ------------------------------------------------
+      # `from` is required, `through` defaults to HEAD. Both accept commits,
+      # branches, or tags and are resolved to full commit IDs before the graph
+      # query. Wuko asks Git for every best common ancestor and fails when a
+      # criss-cross history produces more than one, rather than silently
+      # picking an unstable boundary. Nothing is fetched, so CI has to check
+      # out enough history for both revisions.
+      - id: branch_point
+        type: git_merge_base
+        with:
+          from: spike
+          through: main
+
+      # --- history since that boundary --------------------------------------
+      # `after` is an EXCLUSIVE ancestor boundary and `through` is inclusive,
+      # so this is the spike's own work and nothing else.
+      - id: spike_commits
+        type: git_log
+        with:
+          after: "{{ .steps.branch_point.sha }}"
+          through: spike
+
+      - id: report_spike
+        type: shell
+        with:
+          command: printf
+          args:
+            - "spike branched at %s and added %s commits (has_more=%s)\n"
+            - "{{ .steps.branch_point.short_sha }}"
+            - "{{ .steps.spike_commits.count }}"
+            - "{{ .steps.spike_commits.has_more }}"
+
+      # `limit` is a plain integer from 1 through 1000 and defaults to 100.
+      # Wuko asks Git for one record BEYOND the limit: that probe is never
+      # returned, but it sets `has_more`, so release automation can refuse
+      # incomplete input instead of quietly shipping a truncated changelog.
+      - id: bounded_history
+        type: git_log
+        with:
+          limit: 2
+
+      - id: report_bounded
+        type: shell
+        with:
+          command: printf
+          args:
+            - "limit=2 returned %s commits, has_more=%s\n"
+            - "{{ .steps.bounded_history.count }}"
+            - "{{ .steps.bounded_history.has_more }}"
+
+      # `ancestry` picks the path through the graph; `merges` independently
+      # picks which commits from that path come back. First-parent traversal
+      # follows the primary parent of each merge, so the feature branch's
+      # internal commits disappear and one entry per merge remains - useful
+      # when merge commits stand for pull requests.
+      - id: mainline_merges
+        type: git_log
+        with:
+          ancestry: first_parent
+          merges: only
+
+      # The complementary view: direct mainline work with the merges filtered
+      # out. `ancestry: all` with `merges: include` (both defaults) would
+      # instead return every reachable commit.
+      - id: mainline_commits
+        type: git_log
+        with:
+          ancestry: first_parent
+          merges: exclude
+
+      # Commits are newest first and every record has the `git_revision` shape
+      # minus `found`, so a foreach can collect a smaller release-oriented
+      # record from them.
+      - id: release_notes
+        foreach:
+          items: steps.mainline_commits.commits
+          collect: |
+            {
+              "sha": foreach.item.short_sha,
+              "type": foreach.item.conventional.type,
+              "subject": foreach.item.conventional.subject,
+              "conventional": foreach.item.conventional.valid
+            }
+          steps:
+            - id: line
+              type: shell
+              if: foreach.item.conventional.valid
+              with:
+                command: printf
+                args:
+                  - "  %s %-8s %s\n"
+                  - "{{ .foreach.item.short_sha }}"
+                  - "{{ .foreach.item.conventional.type }}"
+                  - "{{ .foreach.item.conventional.subject }}"
+
+      - id: report_mainline
+        type: shell
+        with:
+          command: printf
+          args:
+            - "mainline: %s merge commit(s), %s direct commit(s)\n"
+            - "{{ .steps.mainline_merges.count }}"
+            - "{{ .steps.mainline_commits.count }}"
+
+      # `paths` filters which commits appear, using native Git pathspec
+      # semantics passed after `--`. It does not return changed-file details;
+      # `git_diff` does that.
+      - id: pricing_history
+        type: git_log
+        with:
+          paths: [pricing.md]
+          through: feature
+
+      - id: report_pricing
+        type: shell
+        with:
+          command: printf
+          args: ["pricing.md was touched by %s commits\n", "{{ .steps.pricing_history.count }}"]
+
+      # --- changes, as data -------------------------------------------------
+      # `source` is `commit` (the default), `staged`, or `unstaged`. With no
+      # `from`, a commit is compared with its first parent; a root commit is
+      # compared with the empty tree. Explicit endpoints compare two trees and
+      # need not be ancestors of each other.
+      #
+      # Rename detection is on by default and is disabled explicitly rather
+      # than inherited, so the repository's own `diff.renames` setting can
+      # never change the result. Copy detection is opt-in and requires renames.
+      - id: branch_diff
+        type: git_diff
+        with:
+          from: "{{ .steps.branch_point.sha }}"
+          through: spike
+          renames: true
+
+      - id: report_branch_diff
+        type: shell
+        with:
+          command: printf
+          args:
+            - "spike diff: changed=%s files=%s +%s -%s binary=%s\n"
+            - "{{ .steps.branch_diff.changed }}"
+            - "{{ .steps.branch_diff.count }}"
+            - "{{ .steps.branch_diff.additions }}"
+            - "{{ .steps.branch_diff.deletions }}"
+            - "{{ .steps.branch_diff.binary_files }}"
+
+      # Every file carries status, path, previous_path, old_mode, new_mode,
+      # old_oid, new_oid, additions, deletions, binary, and score. Status is
+      # one of added, copied, deleted, modified, renamed, type_changed,
+      # unmerged, or unknown. Paths are read from NUL-delimited Git output, so
+      # whitespace and Unicode in a filename stay unambiguous.
+      - id: changed_files
+        foreach:
+          items: steps.branch_diff.files
+          collect: '{"path": foreach.item.path, "status": foreach.item.status}'
+          steps:
+            - id: describe
+              type: shell
+              with:
+                command: printf
+                args:
+                  - "  %-9s %s (+%s -%s)\n"
+                  - "{{ .foreach.item.status }}"
+                  - "{{ .foreach.item.path }}"
+                  - "{{ .foreach.item.additions }}"
+                  - "{{ .foreach.item.deletions }}"
+
+      # `unstaged` compares tracked worktree files with the index and never
+      # includes untracked files; `staged` compares the index with HEAD and
+      # works even in an unborn repository.
+      - id: dirty_worktree
+        type: shell
+        with:
+          command: sh
+          args:
+            - "-c"
+            - |
+              set -e
+              printf 'catalog\npricing: 19.995\nsee pricing.md\nnote: work in progress\n' > catalog.md
+              printf 'trailing whitespace follows   \n' > notes.md
+              git add notes.md
+
+      - id: unstaged
+        type: git_diff
+        with: {source: unstaged}
+
+      - id: staged
+        type: git_diff
+        with: {source: staged}
+
+      - id: report_worktree
+        type: shell
+        with:
+          command: printf
+          args:
+            - "worktree: %s unstaged, %s staged\n"
+            - "{{ .steps.unstaged.count }}"
+            - "{{ .steps.staged.count }}"
+
+      # --- whitespace policy -------------------------------------------------
+      # `git_diff_check` fails when the selected diff introduces whitespace
+      # errors or conflict markers, and returns no outputs on success. `source`
+      # is required and accepts commit, staged, unstaged, or `pushed` - the
+      # last one reads `.git.hook.payload.updates` inside a pre-push hook
+      # workflow, or an explicit `updates: {expr: ...}` list outside one.
+      #
+      # The staged file above ends in trailing whitespace, so this one fails on
+      # purpose and `catch` reports Git's own path and line diagnostics.
+      - id: whitespace_policy
+        try:
+          steps:
+            - id: check_staged
+              type: git_diff_check
+              with: {source: staged}
+        catch:
+          steps:
+            - id: rejected
+              type: shell
+              with:
+                command: printf
+                args:
+                  - "staged changes rejected by git_diff_check:\n  %s\n"
+                  - "{{ .error.message }}"
+
+      # The committed history is clean, so the same check passes over it and
+      # publishes nothing at all.
+      - id: check_history
+        type: git_diff_check
+        with:
+          source: commit
+          from: "{{ .steps.branch_point.sha }}"
+          through: spike
+
+      - id: summary
+        type: shell
+        with:
+          command: printf
+          args:
+            - "%s: %s commits on the mainline, branch point %s, %s recovered check\n"
+            - "{{ .workflow.name }}"
+            - "{{ .steps.mainline_commits.count }}"
+            - "{{ .steps.branch_point.short_sha }}"
+            - "{{ .steps.whitespace_policy.recovered }}"

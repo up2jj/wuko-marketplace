@@ -1,0 +1,319 @@
+version: 1
+package_version: 1.0.0
+name: commit-policy
+description: Build and enforce Conventional Commit messages, then create the commit itself with git_commit
+
+# Two steps and two helpers cover commit policy:
+#
+#   git_conventional_commit  create or validate a message. A PURE text
+#                            operation - it never invokes Git and does not even
+#                            need a repository.
+#   git_commit               stage pathspecs and create the commit.
+#   buildConventionalCommit / isConventionalCommit
+#                            the same build and validate operations inside a
+#                            template, an Expr expression, or Lua.
+#
+# Everything here runs against a throwaway repository in a managed temp
+# directory, so your own history is never touched.
+#
+#   wuko run --file .wuko/workflows/commit-policy/wuko.yaml
+#   wuko run --file .wuko/workflows/commit-policy/wuko.yaml --var task=WUKO-317
+#
+# Send a message that the policy rejects and watch the catch branch report the
+# component that failed:
+#
+#   wuko run --file .wuko/workflows/commit-policy/wuko.yaml \
+#     --var proposed_message='updated some stuff'
+#
+# This is also the shape of a commit-msg hook. `wuko git hook init` writes a
+# starter `.wuko/git-hooks.yaml` plus shell-free example workflows, and
+# `wuko git hook install` installs the dispatchers:
+#
+#   version: 1
+#   hooks:
+#     commit-msg:
+#       - workflow: git-commit-message
+#
+# Inside a hook run the message arrives as a read-only context rather than a
+# variable - `.git.hook.payload.message_file` for commit-msg, alongside
+# `.git.hook.name`, `.git.hook.args`, `.git.hook.stdin`, and the absolute
+# `.git.repository.root`. Read that file with the `file` step and hand it to
+# `git_conventional_commit`; no shell is involved.
+
+vars:
+  task: WUKO-142
+  proposed_message: "fix(auth): prevent expired session reuse WUKO-142"
+
+steps:
+  # --- creating a message ---------------------------------------------------
+  # `create` requires `type` and `subject`. `scope`, `breaking`, `body`, and
+  # `task` are optional; `variable` publishes the generated message. Creation
+  # lowercases `type` for canonical output but preserves the casing of `scope`,
+  # `subject`, and `task`.
+  - id: message
+    type: git_conventional_commit
+    with:
+      operation: create
+      type: feat
+      scope: catalog
+      subject: publish prices with the currency
+      body: |
+        Every price is now emitted with an ISO 4217 code.
+
+        Consumers that assumed EUR must read the new field.
+      # `!` before the colon, which is what marks a breaking change.
+      breaking: true
+      # An optional subject suffix. It works on its own; `task_regex` makes
+      # creation verify it. The pattern is Go RE2 and must match the whole task.
+      task: "{{ .vars.task }}"
+      task_regex: 'WUKO-[0-9]+'
+      variable: commit_message
+
+  - id: show_message
+    type: shell
+    with:
+      command: printf
+      args:
+        - "created [%s] %s\n---\n%s\n---\n"
+        - "{{ .steps.message.classification }}"
+        - "{{ .steps.message.type }}({{ .steps.message.scope }})!: {{ .steps.message.subject }}"
+        - "{{ .vars.commit_message }}"
+
+  # --- validating a message -------------------------------------------------
+  # `validate` requires `message` and rejects every creation field. `types` and
+  # `scopes` are case-insensitive allowlists, `force_scope` requires a scope,
+  # and `strict` withdraws the merge/autosquash exemptions.
+  #
+  # Validation follows conventional-pre-commit: the default types are build,
+  # chore, ci, docs, feat, fix, perf, refactor, revert, style, and test; a body
+  # requires a blank separating line; Git comment lines and verbose diff
+  # sections are ignored. Custom `types` keep the upstream behavior of adding
+  # `feat` and `fix` when neither is listed.
+  - id: policy
+    try:
+      steps:
+        - id: check_message
+          type: git_conventional_commit
+          with:
+            operation: validate
+            message: "{{ .vars.proposed_message }}"
+            types: [feat, fix, docs, refactor]
+            scopes: [catalog, auth, cli]
+            force_scope: true
+            strict: true
+            # With a task pattern the cleaned header must END with a matching
+            # task. It is anchored automatically and must start at the header
+            # or follow whitespace, so a match inside a longer word is not a
+            # task. A body may still follow.
+            task_regex: 'WUKO-[0-9]+'
+
+        - id: accepted
+          type: shell
+          with:
+            command: printf
+            args:
+              - "accepted: type=%s scope=%s task=%s subject=[%s]\n"
+              - "{{ .steps.check_message.type }}"
+              - "{{ .steps.check_message.scope }}"
+              - "{{ .steps.check_message.task }}"
+              # The matched suffix is excluded from `subject` and returned in
+              # `task`, so the two never overlap.
+              - "{{ .steps.check_message.subject }}"
+    catch:
+      steps:
+        - id: rejected
+          type: shell
+          with:
+            command: printf
+            args:
+              - "rejected: %s\n"
+              - "{{ .error.message }}"
+
+  # Git's own merge and autosquash messages are exempt by default. They come
+  # back with `valid: true` and their own `classification`, but the parsed
+  # conventional components stay empty - `strict: true` above is what rejects
+  # them.
+  - id: fixup
+    type: git_conventional_commit
+    with:
+      operation: validate
+      message: "fixup! feat(catalog): publish prices with the currency"
+
+  - id: show_fixup
+    type: shell
+    with:
+      command: printf
+      args:
+        - "autosquash message: valid=%s classification=%s type=[%s]\n"
+        - "{{ .steps.fixup.valid }}"
+        - "{{ .steps.fixup.classification }}"
+        - "{{ .steps.fixup.type }}"
+
+  # --- the same two operations as helpers -----------------------------------
+  # No step, no repository: the helpers are available in Go templates, in every
+  # Expr surface, and in Lua as `wuko.helpers.build_conventional_commit` and
+  # `is_conventional_commit`.
+  - id: release_message
+    type: set
+    with:
+      variable: release_message
+      expr: |
+        buildConventionalCommit({
+          "type": "chore",
+          "scope": "release",
+          "subject": "publish " + vars.task,
+          "types": ["chore", "feat", "fix"],
+          "force_scope": true
+        })
+
+  # `isConventionalCommit` returns a boolean instead of failing, which makes it
+  # usable directly in a condition.
+  - id: gate
+    type: shell
+    if: 'isConventionalCommit(vars.release_message, {"strict": true})'
+    with:
+      command: printf
+      args: ["helpers built and approved: %s\n", "{{ .vars.release_message }}"]
+
+  # The template form, with `dict` supplying the option object.
+  - id: template_form
+    type: set
+    with:
+      variable: hotfix_message
+      value: >-
+        {{ dict "type" "fix" "scope" "auth" "subject" "reject reused sessions" "task" .vars.task | buildConventionalCommit }}
+
+  # --- creating the commit --------------------------------------------------
+  - id: repo
+    type: temp
+    with: {kind: directory, pattern: wuko-commit-policy-*}
+
+  - working_directory: "{{ .steps.repo.path }}"
+    steps:
+      - id: init_repo
+        type: shell
+        with:
+          command: sh
+          args:
+            - "-c"
+            - |
+              set -e
+              git init -q -b main
+              git config commit.gpgsign false
+              printf 'price: 19.99 EUR\n' > catalog.md
+
+      # `git_commit` stages the listed pathspecs with `git add -A --` and then
+      # commits the COMPLETE resulting index, including anything staged before
+      # the step. Omit `paths` to commit only what is already staged. A
+      # pathspec matching no file stages nothing rather than failing, so
+      # `on_empty` still decides the outcome when a generator produced nothing.
+      #
+      # `body` and ordered `trailers` remove the need to hand-manage message
+      # separators. Repeated trailer tokens are allowed; Git collapses
+      # identical neighbours.
+      #
+      # An explicit `author` supplies both identities, so a fresh CI container
+      # can commit with no persistent Git configuration; an explicit
+      # `committer` replaces only the committer. Neither is ever written to
+      # repository or global config - they are passed to `git commit` through
+      # its environment only.
+      - id: initial_commit
+        type: git_commit
+        with:
+          message: "{{ .vars.commit_message }}"
+          paths: [catalog.md]
+          author:
+            name: Wuko Automation
+            email: automation@example.test
+          committer:
+            name: Release Bot
+            email: releases@example.test
+          trailers:
+            - {token: Refs, value: "{{ .vars.task }}"}
+            - {token: Reviewed-by, value: "Ada Example <ada@example.test>"}
+          # Uses the effective committer identity.
+          signoff: true
+          # Repository hooks run normally; `verify: false` is Git's
+          # --no-verify and should stay a deliberate exception.
+          verify: true
+
+      - id: report_commit
+        type: shell
+        with:
+          command: printf
+          args:
+            - "created=%s commit=%s\n"
+            - "{{ .steps.initial_commit.created }}"
+            - "{{ .steps.initial_commit.commit }}"
+
+      # Read the commit back to see the body and both trailers Git appended,
+      # and that the author and committer really did differ.
+      - id: committed
+        type: git_revision
+
+      - id: show_commit
+        type: shell
+        with:
+          command: printf
+          args:
+            - "author=%s committer=%s\n---\n%s\n---\n"
+            - "{{ .steps.committed.author.email }}"
+            - "{{ .steps.committed.committer.email }}"
+            - "{{ .steps.committed.message }}"
+
+      # --- an unchanged index ------------------------------------------------
+      # `on_empty` is `skip` (the default), `fail`, or `commit`. `skip` is what
+      # makes repeated automation idempotent: the step succeeds, reports
+      # `created: false`, and returns the CURRENT HEAD.
+      - id: unchanged
+        type: git_commit
+        with:
+          message: "chore(catalog): regenerate"
+          paths: [catalog.md]
+          on_empty: skip
+
+      - id: report_unchanged
+        type: shell
+        with:
+          command: printf
+          args:
+            - "second run: created=%s head_unchanged=%s\n"
+            - "{{ .steps.unchanged.created }}"
+            - "{{ eq .steps.unchanged.commit .steps.initial_commit.commit }}"
+
+      # `on_empty: commit` passes --allow-empty and is the one policy that is
+      # NOT idempotent: retrying after a commit succeeded but its HEAD lookup
+      # failed appends a second empty commit. Use it only for deliberate
+      # heartbeat commits.
+      #
+      # - id: heartbeat
+      #   type: git_commit
+      #   with: {message: "chore: record automation run", on_empty: commit}
+
+      # Compose the two steps when the message should be built and validated
+      # separately from the commit that carries it.
+      - id: hotfix
+        type: shell
+        with:
+          command: sh
+          args: ["-c", "printf 'price: 19.99 USD\\n' > catalog.md"]
+
+      - id: hotfix_commit
+        type: git_commit
+        with:
+          message: "{{ .vars.hotfix_message }}"
+          paths: [catalog.md]
+          on_empty: fail
+
+      - id: history
+        type: git_log
+
+      - id: summary
+        type: shell
+        with:
+          command: printf
+          args:
+            - "%s: %s commits, policy recovered=%s\n"
+            - "{{ .workflow.name }}"
+            - "{{ .steps.history.count }}"
+            - "{{ .steps.policy.recovered }}"

@@ -1,0 +1,254 @@
+version: 1
+package_version: 1.0.0
+name: observe-and-react
+description: Run a body in the background on filesystem and shell events with the observe control
+
+# `observe` opens and validates a source, publishes a ready result, and then
+# keeps running its body in the BACKGROUND while the foreground workflow
+# carries on. It is the control behind watch-and-rebuild loops.
+#
+#   source        filesystem, http, or shell
+#   debounce      300ms by default; an explicit 0s disables it
+#   on_change     restart (default) | queue | skip
+#   on_error      fail (default) | continue
+#
+# After the foreground sequence succeeds, Wuko waits for every active observer
+# until it is interrupted - a watch loop is supposed to keep watching. This
+# example instead finishes with an explicit `return`, which deliberately
+# cancels and joins the observers WITHOUT turning that shutdown into a failure,
+# so the package terminates on its own.
+#
+#   wuko run --file .wuko/workflows/observe-and-react/wuko.yaml
+#
+# Give each observer longer to react before the next edit lands:
+#
+#   wuko run --file .wuko/workflows/observe-and-react/wuko.yaml --var edit_pause=800ms
+#
+# Everything happens inside a managed temp directory, so nothing in your own
+# tree is watched or written.
+
+vars:
+  edit_pause: 400ms
+
+steps:
+  - id: workspace
+    type: temp
+    with: {kind: directory, pattern: wuko-observe-*}
+
+  # A generated tree that the watch patterns would otherwise reach. Watching
+  # `**/*.md` genuinely matches inside it, which is what `ignore` is for.
+  - id: generated_tree
+    type: file
+    with: {operation: mkdir, path: "{{ .steps.workspace.path }}/generated", recursive: true}
+
+  - id: seed
+    type: file
+    with:
+      operation: write
+      path: "{{ .steps.workspace.path }}/index.md"
+      content: "# index\n"
+      overwrite: true
+
+  # --- filesystem observation -----------------------------------------------
+  # `id`, `source.type`, and a non-empty `steps` body are required. The
+  # filesystem source requires `paths`, defaults `root` to `.`, and defaults
+  # events to create, modify, rename, and remove - otherwise it matches the
+  # one-shot `type: watch` step.
+  #
+  # An `ignore` entry excludes a path when it matches the path itself OR any
+  # directory above it, so `generated` excludes that whole subtree.
+  - id: docs
+    observe:
+      source:
+        type: filesystem
+        with:
+          root: "{{ .steps.workspace.path }}"
+          paths: ["**/*.md"]
+          ignore: ["generated", "**/*.tmp"]
+          events: [create, modify, rename, remove]
+      debounce: 150ms
+      # restart cancels and joins the active body before starting a
+      # replacement; queue coalesces changes into at most one pending run;
+      # skip drops a trigger that arrives while the body is busy - and on a
+      # polling source with `trigger: change` that state is never reported
+      # again, because the skipped poll already became the comparison baseline.
+      # Static, like `source.type` and the event list: these are validated
+      # before the run rather than rendered during it.
+      on_change: restart
+      steps:
+        # The body runs immediately once, then again on every trigger. Every
+        # source provides `initial`, the one-based `iteration`, and `source`.
+        # Each run starts from a private snapshot taken where the control was
+        # DECLARED: later foreground outputs and previous body outputs are
+        # deliberately unavailable.
+        - id: rebuild
+          type: shell
+          with:
+            script: 'printf "  [docs] run %s initial=%s source=%s changes=%s\n" "$1" "$2" "$3" "$4"'
+            args:
+              - "{{ .observe.iteration }}"
+              - "{{ .observe.initial }}"
+              - "{{ .observe.source }}"
+              - "{{ len .observe.filesystem.changes }}"
+
+        # Filesystem runs additionally provide `.observe.filesystem.paths` and
+        # sorted `.observe.filesystem.changes` records of `path` and
+        # `operations`. The initial run carries none, so guard on `initial`.
+        # Fan-out controls are not allowed inside an observer body, so this
+        # walks the records with an ordinary template `range`.
+        - id: changed
+          if: "!observe.initial"
+          type: shell
+          with:
+            script: 'printf "  [docs] changed: %s\n" "$1"'
+            args:
+              - >-
+                {{ range .observe.filesystem.changes }}{{ .path }}({{ join "," .operations }}) {{ end }}
+
+  # --- shell observation ----------------------------------------------------
+  # The shell source polls a command and triggers when its RESULT changes.
+  # `command` is required; use `command: sh` with `args: [-c, ...]` for a
+  # script. The command runs once during synchronous readiness, and that first
+  # result is what the initial body run sees.
+  #
+  # A non-zero exit is an observation carrying an `error` field, not a source
+  # failure - an exit code is often the thing worth watching. A command that
+  # cannot be started at all, a poll that exceeds `timeout`, and unparsable
+  # JSON from a command that SUCCEEDED are fatal source errors instead.
+  #
+  # `trigger: change` compares stdout and the exit code. stderr is captured for
+  # the body but stays out of that comparison, so a command that annotates
+  # every run does not retrigger forever.
+  - id: revision
+    observe:
+      source:
+        type: shell
+        with:
+          command: sh
+          args:
+            - "-c"
+            - 'cat "$0/revision" 2>/dev/null || printf none'
+            - "{{ .steps.workspace.path }}"
+          every: 200ms
+          timeout: 5s
+          trigger: change
+          output: text
+      debounce: 0s
+      # `continue` reports a source failure and keeps observing, leaving the
+      # active body alone and never failing the workflow. `fail`, the default,
+      # would stop the observer AND cancel the foreground plus sibling
+      # observers. A source that cannot be OPENED always fails its step
+      # whatever this says - a polling source makes its first request during
+      # readiness, so a first failure is a launch failure.
+      on_error: continue
+      steps:
+        - id: publish
+          type: shell
+          with:
+            # `.observe.shell` carries command, stdout, stderr, exit_code,
+            # truncated, and `value` - trimmed stdout, or its parsed JSON when
+            # `output` is json.
+            script: 'printf "  [rev] run %s value=%s exit=%s\n" "$1" "$2" "$3"'
+            args:
+              - "{{ .observe.iteration }}"
+              - "{{ .observe.shell.value }}"
+              - "{{ .observe.shell.exit_code }}"
+
+  # The launch result at `steps.<id>` is immutable: it records `status:
+  # observing`, source type and readiness metadata, `debounce`, `on_change`,
+  # and `on_error`, and is never mutated from a background goroutine.
+  - id: report_launch
+    type: shell
+    with:
+      command: printf
+      args:
+        - "observers: docs=%s (%s, %s) revision=%s (%s)\n"
+        - "{{ .steps.docs.status }}"
+        - "{{ .steps.docs.on_change }}"
+        - "{{ .steps.docs.debounce }}"
+        - "{{ .steps.revision.status }}"
+        - "{{ .steps.revision.on_error }}"
+
+  # --- foreground work that the observers react to --------------------------
+  - id: edit_guide
+    type: file
+    with:
+      operation: write
+      path: "{{ .steps.workspace.path }}/guide.md"
+      content: "# guide\n"
+      overwrite: true
+
+  - id: settle_guide
+    attempt: {duration: vars.edit_pause}
+
+  # Ignored: `generated` is excluded even though `**/*.md` matches it, and
+  # `.tmp` is excluded by suffix. Neither of these triggers the docs observer.
+  - id: write_ignored
+    type: file
+    with:
+      operation: write
+      path: "{{ .steps.workspace.path }}/generated/api.md"
+      content: "# generated\n"
+      overwrite: true
+
+  - id: write_scratch
+    type: file
+    with:
+      operation: write
+      path: "{{ .steps.workspace.path }}/notes.tmp"
+      content: "scratch\n"
+      overwrite: true
+
+  - id: settle_ignored
+    attempt: {duration: vars.edit_pause}
+
+  # Watched again: two files in one debounce window arrive as one trigger
+  # carrying both change records.
+  - id: edit_pair
+    type: shell
+    with:
+      script: |
+        printf '# index\nupdated\n' > "$1/index.md"
+        printf '# guide\nupdated\n' > "$1/guide.md"
+      args: ["{{ .steps.workspace.path }}"]
+
+  - id: settle_pair
+    attempt: {duration: vars.edit_pause}
+
+  # Changing the polled command's output is what retriggers the shell observer.
+  - id: bump_revision
+    type: file
+    with:
+      operation: write
+      path: "{{ .steps.workspace.path }}/revision"
+      content: "2f1c9ae"
+      overwrite: true
+
+  - id: settle_revision
+    attempt: {duration: vars.edit_pause}
+
+  - id: done
+    type: shell
+    with:
+      command: printf
+      args: ["foreground finished; returning cancels and joins both observers\n"]
+
+  # Without this the run would keep watching until you interrupt it. A `return`
+  # is a SUCCESSFUL early finish: observers are cancelled and joined, and that
+  # shutdown is not a failure. Body failures are reported but never stop
+  # observation either, whatever `on_error` says.
+  - return:
+      outputs:
+        watched: '"index.md, guide.md"'
+
+# Background jobs are always joined before workflow `finally` and before
+# managed-resource cleanup, so this runs after both observers have stopped and
+# their child processes are gone. `finally` is the right place for shutdown
+# work; the observe control itself is rejected in cleanup, actions, lifecycle
+# hooks, executors, fan-out bodies, and nested observers.
+finally:
+  - id: shutdown
+    type: shell
+    with:
+      command: printf
+      args: ["both observers stopped before finally ran\n"]

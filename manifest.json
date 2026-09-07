@@ -2,6 +2,17 @@
   "version": 1,
   "packages": [
     {
+      "name": "attempt-control",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/attempt-control",
+      "path": "packages/attempt-control.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "One control for timeouts, retries, and polling - isolated passes, two predicates, and at-least-once effects",
+      "source_sha256": "354bd989ec97fcd50ec51d1a05d13582a51bec956c5889902379740329b59d1c",
+      "sha256": "0b9f00d090e718f100fc851061118e83ca510633b7db0f79a7bbc52af9bf1a5c"
+    },
+    {
       "name": "choice-and-table",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/choice-and-table",
@@ -13,6 +24,17 @@
       "sha256": "110f96c6c784cee158b484417901e4aa223d94a5385ec9a06405494acb817a06"
     },
     {
+      "name": "commit-policy",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/commit-policy",
+      "path": "packages/commit-policy.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Build and enforce Conventional Commit messages, then create the commit itself with git_commit",
+      "source_sha256": "4dc7411c834bee7a540500182e90b1132acea843779c5cf141fa4eaf109308cd",
+      "sha256": "cf881ee90c00b87d8623f91bdc5168d3ea9389a75b91b5944fdd59fde1ac0742"
+    },
+    {
       "name": "concurrent-dag",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/concurrent-dag",
@@ -20,8 +42,8 @@
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Order concurrent children with sibling needs edges and read committed ancestor state",
-      "source_sha256": "459117093b5fc2b94804a43693971caa8df9002f6e13370490f1741fd314d6ab",
-      "sha256": "2230eac7ec78b970b4a98da2f63439f7069b35a707e20e5184fb83d99c013611"
+      "source_sha256": "d0467c6202f8d489ae233b18ad58c8866486d31c9edb89721985fff7a7890905",
+      "sha256": "5e1a4cd703a35de1529d0b4213be68ed7263845de6bfa5ddbb14cf7059ccc91e"
     },
     {
       "name": "durable-state",
@@ -33,6 +55,28 @@
       "description": "Keep typed state between runs with key_value expr, atomic update, defaults, and prefixes",
       "source_sha256": "f14cebcd8f08658ec8180cfe48cc71c6a07c3b1b98859829bfb2c51770cddf17",
       "sha256": "ac4a2d20c363a0b9663b4ffd02159ffa085c8a3a0c852ce733edf9d9b3524c98"
+    },
+    {
+      "name": "expression-toolbox",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/expression-toolbox",
+      "path": "packages/expression-toolbox.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Text, parsing, URI, encoding, hashing, number, and secure-generator helpers in templates, Expr, and Lua",
+      "source_sha256": "aebfe279c578a7934e6730a8e2487c01a79522da1e235b9a72289e8e5e263aa2",
+      "sha256": "95465f993369a77142d60e66df5290c29d4714d7d174e6901d0ffc9cc8faec36"
+    },
+    {
+      "name": "git-history",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/git-history",
+      "path": "packages/git-history.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Read commits, branch points, history slices, and diffs as structured data instead of parsing git output",
+      "source_sha256": "66ec946fe1ec8aaaaa4fd5b348e1e5c06fea4e3610067b4928c36360db62bc60",
+      "sha256": "3c058bce7f48aa21a09dd99102b19f9ee1c2cc9c1805abdfa1c8c6c1b4d89102"
     },
     {
       "name": "hello-wuko",
@@ -57,6 +101,17 @@
       "sha256": "14c5a443b3f2f98080a769702647e1edebc02ddaa1522e5a48c9b201f13b33f4"
     },
     {
+      "name": "managed-process",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/managed-process",
+      "path": "packages/managed-process.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Run readiness-gated background services and call them as JSONL RPC workers",
+      "source_sha256": "a62b831dc8a7f1f8823243ee1945f62dcc63d583b042037bfa9e8213af2b1556",
+      "sha256": "264acaef86ec42ecf5ee6bfcbf36ee522de249c57aa0ca9b3d20204eaa375a5f"
+    },
+    {
       "name": "multiplexer-status",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/multiplexer-status",
@@ -66,6 +121,17 @@
       "description": "Label and annotate the hosting tmux, cmux, or Herdr context, degrading cleanly when there is none",
       "source_sha256": "b88802492b85203609a2128aa23221a765c48037f3b10d1cacceeb61b7753f98",
       "sha256": "d9ab21c8655baf813eccb99a1e38d0bbb9cba0b78ec2e033d8be540d6673b6a4"
+    },
+    {
+      "name": "observe-and-react",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/observe-and-react",
+      "path": "packages/observe-and-react.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Run a body in the background on filesystem and shell events with the observe control",
+      "source_sha256": "2ca3544413b4a1418328745c6a7994baa35c3946351c1c19cde0a8d2404abc8e",
+      "sha256": "6a6a8591e0a9bcece2dd1dca57db7f4ada6eae2a5e4071ada608a9668be97934"
     },
     {
       "name": "probe-exit-codes",
@@ -86,8 +152,8 @@
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Race a sequential body against a named monitor and publish the recorded winner",
-      "source_sha256": "12c25bfa595be558827761c076ec9f31f711d71f6f2c48e3307cb83aebebae90",
-      "sha256": "c1db4318bdad1b5004d045dad2f8ec90db1000a71bbd32d29edbe4fe1b631c90"
+      "source_sha256": "58794fa3c1f2c8c7f0f21832ab6460ffe774e1c8fe95bc652a067a0086a2ac9a",
+      "sha256": "a420cad7e60e55cb81291dc989fc14486a284e3b141b5204ea8dc92693446f85"
     },
     {
       "name": "recordable-time",
@@ -97,8 +163,8 @@
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Capture time through the one step allowed to read the clock, then transform it purely",
-      "source_sha256": "1a0d5a324b6c6dac60a37da24569b82b48f31d3918636c5bb9ee9d03bed1f2f9",
-      "sha256": "f8c0b0298f4b97be8db6b64b2a6f7e0476828479f65c03bb58cc9c1e763ded76"
+      "source_sha256": "2db255b81813e08008da790639556c541f48ac1a40110452a759712a6243bb73",
+      "sha256": "a981694d3fcad71a9fbb2850fe4b05d3f31095af501a13b09bafb10cbc416e7b"
     },
     {
       "name": "recover-and-rollback",
@@ -141,8 +207,8 @@
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Drive an interactive PTY program with scripted interactions, dynamic sends, and console styling",
-      "source_sha256": "aa0f505bd634a4f684f6d8e175f9c3cbc464f5b4e4064fabb956f975767996cc",
-      "sha256": "a026901ea20b6201a8c4ea000ca45a69cae499e2827b229b2a83b7b3689774bb"
+      "source_sha256": "5222459767338ddacde42d11c3b3dd7ba80218c4f1c723039f13419f1d9bb263",
+      "sha256": "ad3e60f1285c90aae0505750acb4f12a610a7a19223965e4eb17644549ce0c79"
     },
     {
       "name": "structured-edit",
@@ -154,6 +220,46 @@
       "description": "Mutate JSON, YAML, and TOML with RFC 9535 JSONPath while preserving comments and types",
       "source_sha256": "e0c485242192c39fdc0c8e29dc5da0cd91765178a09961b43962202d58da3390",
       "sha256": "583dd51b70a97798db2138cd9f397c5206073bd2fb5834eb36fbd1d93e7fbdec"
+    },
+    {
+      "name": "vault-secrets",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/vault-secrets",
+      "path": "packages/vault-secrets.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Resolve 1Password and Bitwarden references with secret(), guarded so the workflow still runs without a provider CLI",
+      "source_sha256": "1e7ae892fc9d4767caa22687805a0208d802c043909540b54089b4042ac63cb2",
+      "sha256": "26d7e91312570a9534d5beb7af453449ee16488fb8fb9aed272b39217c3cbc00"
+    }
+  ],
+  "plugins": [
+    {
+      "namespace": "hello",
+      "plugin_version": "0.1.0",
+      "description": "An uppercase step, a local executor, and a slug helper",
+      "source": ".wuko/plugin-sources/hello",
+      "source_sha256": "497b404d0c173a1abc2d5115cdf8092231624e7a76f4356a4f7f39996c09bf2d",
+      "path": "plugins/hello/plugin.json",
+      "sha256": "18fb646ea1fa6cf9711552764fe008949d40b4a1f1371576d81415131b3aba0c",
+      "platforms": [
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64"
+        },
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        }
+      ]
     }
   ]
 }

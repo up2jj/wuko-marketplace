@@ -1,0 +1,304 @@
+version: 1
+package_version: 1.0.0
+name: attempt-control
+description: One control for timeouts, retries, and polling - isolated passes, two predicates, and at-least-once effects
+
+# `attempt` is the single spelling for an execution policy. There is no
+# separate step-level `timeout:` or `retry:` any more:
+#
+#   timeout             bounds ONE pass of the body
+#   max_attempts + …    repeat a pass that FAILED
+#   until + interval    repeat a pass that SUCCEEDED but is not ready yet
+#   max_elapsed_time    bounds everything - passes, backoff, and intervals
+#   duration            the body-less form: a plain fixed delay
+#
+# The two predicates never overlap. `when` asks "is this failure worth another
+# try?"; `until` asks "is this success good enough?" - so `until` has no
+# `error` root at all.
+#
+#   wuko run --file .wuko/workflows/attempt-control/wuko.yaml
+#
+# Make the flaky command fail more often than the budget allows and watch the
+# whole control fail without publishing anything:
+#
+#   wuko run --file .wuko/workflows/attempt-control/wuko.yaml --var failures=9
+#
+# Widen the budget from the command line - every scalar option accepts an Expr
+# expression as well as a literal:
+#
+#   wuko run --file .wuko/workflows/attempt-control/wuko.yaml --var failures=6 --var budget=8
+
+vars:
+  # How many passes the flaky command fails before it succeeds.
+  failures: 2
+  # `max_attempts` for that control, supplied as an expression below.
+  budget: 4
+  # How many polls the readiness probe reports "starting" before "ready".
+  warmup: 3
+
+steps:
+  # The passes below need somewhere to count from that a discarded pass cannot
+  # roll back - which is the whole point of the at-least-once warning.
+  - id: scratch
+    type: temp
+    with: {kind: directory, pattern: wuko-attempt-*}
+
+  # --- 1. the body-less form ------------------------------------------------
+  # A fixed delay with no body at all. This is the same control, which is why
+  # there is no separate `wait`-with-backoff spelling to remember.
+  - id: settle
+    attempt: {duration: 300ms}
+
+  # --- 2. bounding one pass -------------------------------------------------
+  # `max_attempts` DEFAULTS TO 1, because `attempt` is also how a bare timeout
+  # is written: declaring the control must never silently start repeating.
+  - id: quick_work
+    attempt:
+      timeout: 5s
+      steps:
+        - id: work
+          type: shell
+          with:
+            command: printf
+            args: ["bounded pass finished inside its timeout\n"]
+
+  # A pass that overruns is a failure like any other, so `try` can recover it.
+  - id: overrun
+    try:
+      steps:
+        - id: too_slow
+          attempt:
+            timeout: 200ms
+            steps:
+              - id: sleeper
+                type: shell
+                with: {command: sleep, args: ["5"]}
+    catch:
+      steps:
+        - id: report_timeout
+          type: shell
+          with:
+            command: printf
+            args: ["pass exceeded its timeout: %s\n", "{{ .error.status }}"]
+
+  # --- 3. repeating a failing pass ------------------------------------------
+  # Defaults are 1 attempt, a 1s initial delay, multiplier 2, a 30s maximum
+  # delay, and 20% jitter. `backoff_multiplier: 1` with `jitter: 0` would give
+  # a fixed cadence instead.
+  #
+  # Every pass runs on a private copy of the state from before the control, so
+  # a failed pass is discarded WHOLE - including body steps that had already
+  # succeeded inside it. What Wuko cannot discard is the effect on the world:
+  # the counter file below keeps counting, which is exactly what "at-least-once"
+  # means for a command, a request, or a write.
+  - id: flaky_publish
+    attempt:
+      # A literal or an Expr expression, resolved once when execution reaches
+      # the control. Numeric rules for a literal are checked by `wuko validate`;
+      # for an expression they are checked when the control runs.
+      max_attempts: vars.budget
+      initial_delay: 100ms
+      backoff_multiplier: 2
+      max_delay: 400ms
+      jitter: 0.2
+      # Bounds the whole control: every pass, backoff delay, and interval.
+      max_elapsed_time: 30s
+      # A stable idempotency key. It reaches the body as WUKO_STEP_OPERATION_ID
+      # and does NOT change between passes, so a receiving service that
+      # supports idempotency keys can collapse the repeats.
+      operation_id: "attempt-control:publish"
+      steps:
+        - id: package
+          type: shell
+          with:
+            command: printf
+            args: ["  packaging (this reruns on every pass)\n"]
+
+        - id: upload
+          type: shell
+          with:
+            # With `script` instead of `command`, `args` arrive as $1, $2, ...
+            script: |
+              counter="$1/uploads"
+              budget="$2"
+              seen=$(cat "$counter" 2>/dev/null || printf 0)
+              seen=$((seen + 1))
+              printf '%s' "$seen" > "$counter"
+              # The pass number and the operation ID are both in the
+              # environment of every step in the body.
+              printf 'upload attempt %s of %s, operation %s\n' \
+                "${WUKO_STEP_ATTEMPT}" "${WUKO_STEP_MAX_ATTEMPTS}" "${WUKO_STEP_OPERATION_ID}" >&2
+              if [ "$seen" -le "$budget" ]; then
+                printf 'upstream refused (call %s)\n' "$seen" >&2
+                exit 75
+              fi
+              printf published
+            args:
+              - "{{ .steps.scratch.path }}"
+              - "{{ .vars.failures }}"
+            stdout: capture
+
+        - id: record
+          type: set
+          with:
+            variable: published
+            expr: steps.upload.stdout
+
+  # Only the WINNING pass publishes, atomically, and only under the control's
+  # own id. Body outputs never become top-level `steps.<id>` entries and body
+  # variable writes never become top-level `vars.<name>` entries: this is
+  # `steps.flaky_publish.steps.upload` and `steps.flaky_publish.vars.published`,
+  # not `steps.upload` and `vars.published`. A control that fails publishes
+  # nothing at all - no counters, no partial outputs.
+  - id: report_publish
+    type: shell
+    with:
+      command: printf
+      args:
+        - "won on pass %s of %s (polls=%s); body wrote %s\n"
+        - "{{ .steps.flaky_publish.attempts }}"
+        - "{{ .vars.budget }}"
+        - "{{ .steps.flaky_publish.polls }}"
+        - "{{ .steps.flaky_publish.vars.published }}"
+
+  # The command really did run more times than the workflow committed.
+  - id: side_effects
+    type: shell
+    with:
+      command: sh
+      args:
+        - "-c"
+        - 'printf "the upload command ran %s times for one committed result\n" "$(cat "$0/uploads")"'
+        - "{{ .steps.scratch.path }}"
+
+  # --- 4. deciding whether a failure is worth repeating ----------------------
+  # By default every failure is eligible. A failure carrying HTTP request
+  # metadata is filtered instead by `methods` and `statuses`, which default to
+  # GET HEAD OPTIONS PUT DELETE TRACE and 408, 425, 429, 500-599 - so a failing
+  # POST is not retried unless you say so. Eligibility is decided from the
+  # ERROR, not from a declared step type, because a body is a sequence.
+  #
+  # `when` replaces that filter with an expression evaluated after each failed
+  # pass except the last. The failing step's own outputs are reachable directly
+  # on `error` where the name does not collide with a reserved field, so shell
+  # bodies read `error.exit_code` and `error.stderr`. `false` returns the
+  # original failure immediately - no further passes, no backoff.
+  - id: selective_retry
+    try:
+      steps:
+        - id: fatal
+          attempt:
+            max_attempts: 5
+            initial_delay: 50ms
+            when: 'error.exit_code == 75'
+            steps:
+              - id: reject
+                type: shell
+                with:
+                  command: sh
+                  args:
+                    - "-c"
+                    - 'printf "configuration rejected, retrying will not help\n" >&2; exit 2'
+    catch:
+      steps:
+        - id: report_fatal
+          type: shell
+          with:
+            command: printf
+            args:
+              - "exit 2 is not in `when`, so it failed on the first pass: %s\n"
+              - "{{ .error.step }}"
+
+  # --- 5. polling a successful body -----------------------------------------
+  # `until` repeats a body that SUCCEEDED but is not ready yet. It costs no
+  # attempt and waits `interval` rather than a backoff delay. Because `timeout`
+  # bounds one pass rather than the loop, `until` requires `max_elapsed_time`.
+  #
+  # `until` is Expr over the normal roots with `steps` scoped to the body that
+  # just ran, plus a one-based `poll` counter.
+  - id: await_ready
+    attempt:
+      interval: 150ms
+      timeout: 5s
+      max_elapsed_time: 20s
+      until: 'steps.probe.stdout == "ready"'
+      steps:
+        - id: probe
+          type: shell
+          with:
+            script: |
+              counter="$1/polls"
+              warmup="$2"
+              seen=$(cat "$counter" 2>/dev/null || printf 0)
+              seen=$((seen + 1))
+              printf '%s' "$seen" > "$counter"
+              if [ "$seen" -le "$warmup" ]; then printf starting; else printf ready; fi
+            args:
+              - "{{ .steps.scratch.path }}"
+              - "{{ .vars.warmup }}"
+            stdout: capture
+
+  - id: report_ready
+    type: shell
+    with:
+      command: printf
+      args:
+        - "service reported %s after %s polls and %s failure passes\n"
+        - "{{ .steps.await_ready.steps.probe.stdout }}"
+        - "{{ .steps.await_ready.polls }}"
+        - "{{ .steps.await_ready.attempts }}"
+
+  # Readiness expressed by a command SUCCEEDING needs no `until` at all - that
+  # is just a bounded retry with a fixed cadence:
+  #
+  #   - id: await_socket
+  #     attempt:
+  #       max_attempts: 60
+  #       initial_delay: 1s
+  #       backoff_multiplier: 1     # 1 = fixed cadence
+  #       jitter: 0
+  #       max_elapsed_time: 1m
+  #       steps:
+  #         - {id: probe, type: shell, with: {command: test, args: [-S, /tmp/app.sock]}}
+  #
+  # For a reachable-but-not-ready HTTP probe, make "not ready" a success with
+  # `success_statuses` so it costs no attempt:
+  #
+  #       until: steps.probe.status == 200
+  #       steps:
+  #         - {id: probe, type: http, with: {url: ..., success_statuses: [200, 503]}}
+
+  # --- 6. attempt or loop ---------------------------------------------------
+  # Both repeat a body until a condition holds and both read that body through
+  # `steps.<id>`. They differ in what a repeat MEANS: a loop iteration is
+  # progress and every iteration commits, while an attempt pass is an
+  # interchangeable try and only the winner commits. A failing body fails a
+  # loop; it consumes an attempt and repeats.
+  - id: drain
+    loop:
+      until: steps.take.stdout == "0"
+      max_iterations: 5
+      steps:
+        - id: take
+          type: shell
+          with:
+            script: |
+              queue="$1/queue"
+              left=$(cat "$queue" 2>/dev/null || printf 3)
+              left=$((left - 1))
+              [ "$left" -lt 0 ] && left=0
+              printf '%s' "$left" > "$queue"
+              printf '%s' "$left"
+            args: ["{{ .steps.scratch.path }}"]
+            stdout: capture
+
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s: publish=%s passes, poll=%s polls, loop=%s iterations\n"
+        - "{{ .workflow.name }}"
+        - "{{ .steps.flaky_publish.attempts }}"
+        - "{{ .steps.await_ready.polls }}"
+        - "{{ .steps.drain.count }}"

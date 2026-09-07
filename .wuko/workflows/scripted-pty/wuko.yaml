@@ -75,35 +75,44 @@ steps:
   # so startup input needs no artificial prompt. Read a fixed number of lines:
   # a PTY has no EOF, so a `while read` loop would block forever after the
   # scripted sequence ends.
+  # A PTY never sees EOF, so bound any step that could block on `read`. An
+  # execution policy is spelled `attempt`: `timeout` bounds one pass of its
+  # body, and the body publishes under the control's own id.
   - id: preamble
-    type: shell
-    timeout: 30s
-    with:
-      command: sh
-      args: ["-c", "read -r a; read -r b; printf 'received %s then %s\\n' \"$a\" \"$b\""]
-      tty: true
-      interactions:
-        - {send: select-project, newline: true}
-        - {send: enable-feature, newline: true}
+    attempt:
+      timeout: 30s
+      steps:
+        - id: read_pair
+          type: shell
+          with:
+            command: sh
+            args: ["-c", "read -r a; read -r b; printf 'received %s then %s\\n' \"$a\" \"$b\""]
+            tty: true
+            interactions:
+              - {send: select-project, newline: true}
+              - {send: enable-feature, newline: true}
 
   # The expression form builds the interaction list at runtime. It uses Expr
   # (not Go templates) and must return a list of interaction objects; the strings
   # it produces are used as-is and are not rendered afterwards.
+  # With inject_console: false the expression returns an empty list and the
+  # child runs headlessly with nothing scripted - which is the case the
+  # surrounding `attempt` timeout is there for.
   - id: dynamic_console
-    type: shell
-    # With inject_console: false the expression returns an empty list and the
-    # child runs headlessly with nothing scripted. A PTY never sees EOF, so give
-    # any such step a timeout rather than letting it block on `read`.
-    timeout: 30s
-    with:
-      command: sh
-      args: ["-c", "printf 'console> '; read -r c; printf '\\nran %s\\n' \"$c\""]
-      tty: true
-      interactions:
-        expr: >-
-          vars.inject_console
-            ? [{"expect": "console> ", "send": "status " + vars.workspace, "newline": true}]
-            : []
+    attempt:
+      timeout: 30s
+      steps:
+        - id: console_session
+          type: shell
+          with:
+            command: sh
+            args: ["-c", "printf 'console> '; read -r c; printf '\\nran %s\\n' \"$c\""]
+            tty: true
+            interactions:
+              expr: >-
+                vars.inject_console
+                  ? [{"expect": "console> ", "send": "status " + vars.workspace, "newline": true}]
+                  : []
 
   # `terminal` recolors and retitles the OUTER terminal while the user drives the
   # child, so a production console is visually unmistakable. It requires

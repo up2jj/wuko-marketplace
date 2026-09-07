@@ -42,14 +42,14 @@ outputs:
 
 steps:
   - id: watched_work
-    # The parent needs an `id`, every monitor needs a unique `id`, and
-    # `timeout:`/`retry:` are rejected on the parent - bound participants instead.
+    # The parent needs an `id`, every monitor needs a unique `id`, and an
+    # `attempt` policy is rejected on the parent - bound participants instead.
     cancel_on:
       monitors:
+        # A fixed delay is the body-less `attempt` form; there is no separate
+        # `wait` step.
         - id: budget_elapsed
-          type: wait
-          with:
-            duration: 2s
+          attempt: {duration: 2s}
 
       steps:
         - id: prepare

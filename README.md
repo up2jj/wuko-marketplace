@@ -1,9 +1,10 @@
 # Wuko workflow marketplace
 
-A version-1 archive marketplace of runnable [Wuko](https://github.com/up2jj/wuko) workflows.
-Each package demonstrates one capability of the engine, and every example is self-contained:
-POSIX shell builtins and Wuko's own steps only, with no network calls, containers, coding
-agents, or external CLIs.
+A version-1 archive marketplace of runnable [Wuko](https://github.com/up2jj/wuko) workflows and
+one executable plugin. Each package demonstrates one capability of the engine, and every example
+is self-contained: POSIX shell builtins and Wuko's own steps only, with no network calls,
+containers, or coding agents. `vault-secrets` is the one exception, and a guarded one: it reaches
+for the Bitwarden CLI when the machine has one and skips the lookup when it does not.
 
 ## Install
 
@@ -39,6 +40,13 @@ Remove one with `wuko uninstall NAME`.
 | [`durable-state`](.wuko/workflows/durable-state/wuko.yaml) | `key_value` `expr`, atomic `update`, `variable`, `default`, `prefix`, and `clear` | unreleased |
 | [`run-once`](.wuko/workflows/run-once/wuko.yaml) | `once` blocks: keyed idempotency, replayed results, and `on_busy: wait` | unreleased |
 | [`recordable-time`](.wuko/workflows/recordable-time/wuko.yaml) | The `time` step, `workflow.timezone`, and the pure `parseTime`/`addTime`/`formatTime` helpers | unreleased |
+| [`vault-secrets`](.wuko/workflows/vault-secrets/wuko.yaml) | `secret()` in templates, expressions, and conditions, the per-occurrence cache, and the `secrets.ensure_auth` preflight | unreleased |
+| [`attempt-control`](.wuko/workflows/attempt-control/wuko.yaml) | `attempt`: one control for timeout, retry, and polling — isolated passes, `when` vs `until`, and at-least-once effects | unreleased |
+| [`observe-and-react`](.wuko/workflows/observe-and-react/wuko.yaml) | `observe`: background bodies driven by filesystem and shell sources, with `ignore`, `debounce`, `on_change`, and `on_error` | unreleased |
+| [`managed-process`](.wuko/workflows/managed-process/wuko.yaml) | `process` services with log and exec readiness, plus `rpc: jsonl` workers called through `process_call` and a pool | unreleased |
+| [`git-history`](.wuko/workflows/git-history/wuko.yaml) | `git_revision`, `git_merge_base`, `git_log`, `git_diff`, and `git_diff_check` as structured data | unreleased |
+| [`commit-policy`](.wuko/workflows/commit-policy/wuko.yaml) | `git_conventional_commit` create and validate, `git_commit` with trailers and identities, and the commit-message helpers | unreleased |
+| [`expression-toolbox`](.wuko/workflows/expression-toolbox/wuko.yaml) | Text, parsing, URI, encoding, hashing, number, and secure-generator helpers across templates, Expr, and Lua | unreleased |
 
 ## Running an example without installing
 
@@ -70,7 +78,25 @@ wuko run --file .wuko/workflows/scoped-environments/wuko.yaml --var target=darwi
 
 # Scale every matched node by 3 instead of 1
 wuko run --file .wuko/workflows/structured-edit/wuko.yaml --var scale=3
+
+# Exhaust the retry budget, then widen it from the command line
+wuko run --file .wuko/workflows/attempt-control/wuko.yaml --var failures=9
+wuko run --file .wuko/workflows/attempt-control/wuko.yaml --var failures=6 --var budget=8
+
+# Give each observer longer to react before the next edit lands
+wuko run --file .wuko/workflows/observe-and-react/wuko.yaml --var edit_pause=800ms
+
+# Grow the RPC worker pool
+wuko run --file .wuko/workflows/managed-process/wuko.yaml --var workers=4
+
+# Send commit-policy a message its own policy rejects
+wuko run --file .wuko/workflows/commit-policy/wuko.yaml --var proposed_message='updated some stuff'
 ```
+
+`git-history`, `commit-policy`, and `managed-process` build everything they read — a throwaway Git
+repository, a service, an RPC worker — inside a managed temp directory, so they never touch your
+own history or leave a process behind. `observe-and-react` ends with an explicit `return`, which
+cancels and joins its observers instead of watching until you interrupt it.
 
 Three packages keep state between runs, so run them twice:
 
@@ -101,12 +127,72 @@ wuko run --file .wuko/workflows/choice-and-table/wuko.yaml \
   --var environment=staging --var access_mode=read-only
 ```
 
+`vault-secrets` resolves a vault reference only when the Bitwarden CLI is installed and
+unlocked, and otherwise prints the state it found and skips the lookup. Point it at an item of
+your own:
+
+```sh
+wuko run --file .wuko/workflows/vault-secrets/wuko.yaml \
+  --var item=GitHub \
+  --var password_reference=bw://password/GitHub \
+  --var username_reference=bw://username/GitHub
+```
+
 `scripted-pty` runs headlessly by default — scripted PTYs use a 24x80 terminal and need no
 file-backed terminal. Its last step hands the console to you and needs a real terminal:
 
 ```sh
 wuko run --file .wuko/workflows/scripted-pty/wuko.yaml --var handoff=true
 ```
+
+## Plugins
+
+The marketplace also publishes one executable plugin. Plugins are persistent programs that
+exchange newline-delimited JSON with Wuko over stdin and stdout and contribute namespaced steps,
+executors, and helpers.
+
+| Plugin | Provides | Platforms |
+| --- | --- | --- |
+| `hello` | The `hello.uppercase` step, the `hello.local` executor, and the `hello_slug` helper | darwin and linux on amd64 and arm64 |
+
+```sh
+# Interactive picker over every compatible plugin
+wuko plugin install --global https://github.com/up2jj/wuko-marketplace
+
+# Non-interactive
+wuko plugin install --global --package hello https://github.com/up2jj/wuko-marketplace
+
+wuko plugin uninstall --global hello
+```
+
+Installation downloads only the current-platform archive, verifies the manifest digest and the
+archive digest, extracts regular files safely, performs the pure `initialize` handshake, and
+publishes the installation atomically. It never calls `plugin.start` and never executes a binary
+during import or validation. The picker lists only plugins that support the running OS and
+architecture.
+
+Once installed, a namespaced reference needs no declaration:
+
+```yaml
+steps:
+  - id: shout
+    type: hello.uppercase
+    with: {value: hello}
+```
+
+A workflow that must pin an exact release declares it instead, which is also the only way a
+plugin contributes template helpers:
+
+```yaml
+plugins:
+  hello:
+    source: github:up2jj/wuko-marketplace@<ref>
+    sha256: <digest of plugins/hello/plugin.json>
+```
+
+**Marketplace repositories distribute native executable code.** SHA-256 verification protects file
+integrity; it does not establish publisher identity, make a plugin safe, or provide a sandbox.
+Install plugins only from maintainers you trust.
 
 ## Changes with no package of their own
 
@@ -130,14 +216,53 @@ Not every recent addition is something a workflow file can declare, so these hav
   receive an invocation ID, run IDs, and step-run IDs through `reporter.Session`. These are
   deliberately *not* exposed to workflow templates, step environments, or GitHub output, and
   are separate from a step's user-definable `operation_id` idempotency key.
+- **A workflow on standard input.** The exact path `-` reads one workflow snapshot from stdin:
+  `wuko run --file - < wuko.yaml`. Relative resources resolve against the invocation's current
+  directory. Piping a package example works: `wuko run --file - < .wuko/workflows/hello-wuko/wuko.yaml`.
+- **Client-side Git hooks.** `wuko git hook init` writes `.wuko/git-hooks.yaml` plus shell-free
+  example workflows, `wuko git hook install` installs the dispatchers (`--chain` preserves an
+  existing hook and runs it first), and `wuko git hook status` reports their state. Bindings are
+  version-controlled and may only name locally discovered workflows, so a manifest change alone
+  can never make a hook fetch unreviewed code. A hook run gets a read-only `git` context —
+  `.git.hook.name`, `.git.hook.args`, `.git.hook.stdin`, `.git.hook.payload`, and the absolute
+  `.git.repository.root`. `commit-policy` is the shape of a `commit-msg` binding, and
+  `git-history` shows the `git_diff_check` that a `pre-commit` or `pre-push` binding uses.
+- **A canonical execution report.** A run can publish one machine-readable report — schema
+  version, invocation and run IDs, workflow name, status, duration, per-status step counts,
+  attempts, retries, polls, and declared outputs — for CI to archive instead of scraping logs.
+- **Invocation environment loaders.** Repeatable `--env-loader auto|none|mise|asdf|direnv` loads
+  the invocation environment before the workflow does. The loaders that actually changed
+  something are listed in `.run.environment_loaders`, which is always a list and empty when none
+  applied.
+- **Execution provider contexts.** A read-only top-level context describes the system running the
+  workflow, consistently across environment rendering, templates, Expr, Lua, actions, dependency
+  workflows, attempts, scheduled runs, and lifecycle steps. GitHub Actions is the built-in
+  provider and activates only when `GITHUB_ACTIONS` is exactly `true`, exposing `.github` with
+  repository, actor, event, optional `pull_request`, `sha`, `ref`, run metadata, and the complete
+  `payload`. A registered provider that is not active is *absent*, and references to it fail
+  static validation rather than silently becoming an empty object — which is why no package here
+  can demonstrate it locally. Treat every `payload` value as untrusted input.
+- **Wuko as a composite GitHub Action.** A workflow can run through a composite action that
+  exports a configurable token to the workflow and writes a per-step job summary. Actions can
+  also be loaded from a directory in a GitHub repository.
+- **Filesystem steps inside executor scopes.** `file` and `edit` now work against the filesystem
+  of a Docker or devenv executor rather than only the host, and `docker` executors can supervise
+  managed services inside the container. Both need a container, so neither has a package here.
 
 ## Repository layout
 
 ```
-manifest.json                     # generated - never edit by hand
-packages/<name>.tar.gz            # generated deterministic archives
-.wuko/workflows/<name>/wuko.yaml  # package sources
+manifest.json                        # generated - never edit by hand
+packages/<name>.tar.gz               # generated deterministic workflow archives
+plugins/<ns>/plugin.json             # generated public plugin release manifest
+plugins/<ns>/dist/*.tar.gz           # generated public platform archives
+.wuko/workflows/<name>/wuko.yaml     # workflow package sources
+.wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
 ```
+
+`.wuko/plugin-sources/` is deliberately *not* `.wuko/plugins/`, which is the local plugin
+*installation* root: an imported release carries no executable, so sharing the directory would
+break plugin discovery for that namespace in this repository and every directory below it.
 
 `manifest.json` records a `source_sha256` (a digest of the package source tree) alongside the
 archive `sha256`. Only the archive digest is verified at install time; the source digest is a
@@ -149,10 +274,32 @@ After changing or adding a workflow, regenerate both from the repository root:
 wuko marketplace build
 ```
 
-`build` discovers any directory under `.wuko/workflows/` holding a root `wuko.yaml`, rebuilds
-only what changed, and names each package after the workflow's `name` field — so keep the
-directory name and the workflow `name` identical. Validate before building:
+`build` discovers any directory under `.wuko/workflows/` holding a root `wuko.yaml`, packages
+every imported release under `.wuko/plugin-sources/`, rebuilds only what changed, and names each
+workflow package after its `name` field — so keep the directory name and the workflow `name`
+identical. It preserves unchanged files and their timestamps, and removes a stale generated file
+only when it still matches the digest previously recorded for it. Validate before building, and
+use `--check` in CI to verify without writing:
 
 ```sh
 wuko validate
+wuko marketplace build
+wuko marketplace build --check
 ```
+
+Plugin releases are imported rather than built here. Build the release in the plugin project,
+then import it transactionally:
+
+```sh
+cd ../wuko-plugin-hello && just release 0.1.0
+
+cd ../wuko-marketplace
+wuko marketplace plugin add --description "..." ../wuko-plugin-hello   # first import
+wuko marketplace plugin update hello ../wuko-plugin-hello              # later releases
+wuko marketplace build
+```
+
+`plugin add` accepts the same local, HTTPS, and pinned `github:` sources as direct installation.
+It downloads every declared platform archive, validates each digest and safe executable
+structure, and commits the import atomically without executing any binary. Failed validation
+leaves the previous import intact.

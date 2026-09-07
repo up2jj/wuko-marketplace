@@ -1,0 +1,273 @@
+version: 1
+package_version: 1.0.0
+name: managed-process
+description: Run readiness-gated background services and call them as JSONL RPC workers
+
+# `process` runs ONE long-lived program as a readiness-gated service. The step
+# succeeds when the program is READY - not when it exits - and the program then
+# stays managed by its workflow scope: Wuko prefixes its live output with the
+# step `label`, stops it when foreground work ends, joins it before `finally`,
+# and reports an unexpected terminal failure at that join.
+#
+#   position    decides when a service STARTS
+#   scope       decides when it STOPS
+#   readiness   spawn (default), log, exec, or http
+#   liveness    begins after readiness; a failure enters the restart policy
+#   rpc: jsonl  turns the service into a request/response worker
+#
+# Everything here is POSIX shell writing to a managed temp directory, so the
+# package needs no server, no container, and no network.
+#
+#   wuko run --file .wuko/workflows/managed-process/wuko.yaml
+#   wuko run --file .wuko/workflows/managed-process/wuko.yaml --var workers=4
+
+vars:
+  # Size of the RPC worker pool.
+  workers: 3
+  words: ["alpha", "beta", "gamma", "delta"]
+
+steps:
+  - id: state
+    type: temp
+    with: {kind: directory, pattern: wuko-process-*}
+
+  # --- 1. a service gated on a log line -------------------------------------
+  # Log readiness matches a rolling, bounded 1 MiB window across stdout and
+  # stderr, so at least one of those streams must stay `inherit`. It defaults
+  # to a 30-second timeout.
+  #
+  # `label` prefixes the service's live lines. `stdout` and `stderr` accept
+  # `inherit` (the default) or `discard`; unbounded service output is never
+  # retained in step state, so there is no `.stdout` to read afterwards.
+  - id: api
+    type: process
+    with:
+      label: api
+      script: |
+        state="$1"
+        # Pretend startup work, then announce readiness.
+        printf 'api: warming up\n'
+        : > "$state/api.requests"
+        printf 'api: listening on 127.0.0.1:0\n'
+        # Serve until Wuko stops us: SIGTERM arrives as a process group, with
+        # up to shutdown.timeout (10s by default) before SIGKILL.
+        while :; do
+          printf '%s\n' tick >> "$state/api.requests"
+          sleep 0.2
+        done
+      args: ["{{ .steps.state.path }}"]
+      readiness:
+        log: {pattern: "listening on", timeout: 20s}
+      # never (default), on_failure, or always. `allowed_exit_codes` defaults
+      # to [0]. Lifecycle shutdown never triggers a restart, and neither does a
+      # service that fails BEFORE it becomes ready - that failure is simply the
+      # step's own result.
+      restart: {policy: on_failure, backoff: 500ms, max_restarts: 2}
+      shutdown: {timeout: 5s}
+
+  # The immutable startup result carries ready, label, detached, and readiness.
+  - id: report_api
+    type: shell
+    with:
+      command: printf
+      args:
+        - "api ready=%s label=%s detached=%s readiness=%s\n"
+        - "{{ .steps.api.ready }}"
+        - "{{ .steps.api.label }}"
+        - "{{ .steps.api.detached }}"
+        - "{{ .steps.api.readiness }}"
+
+  # Steps placed after the service run while it is alive. This one proves the
+  # service is really running in the background rather than having been waited
+  # for.
+  - id: smoke
+    attempt:
+      max_attempts: 20
+      initial_delay: 100ms
+      backoff_multiplier: 1
+      jitter: 0
+      max_elapsed_time: 10s
+      steps:
+        - id: probe
+          type: shell
+          with:
+            script: 'test "$(wc -l < "$1/api.requests")" -ge 3'
+            args: ["{{ .steps.state.path }}"]
+
+  - id: report_smoke
+    type: shell
+    with:
+      command: printf
+      args: ["the api kept working while the foreground moved on\n"]
+
+  # --- 2. a service gated on an exec probe ----------------------------------
+  # Exec and HTTP probes default to initial_delay 0s, period 10s, timeout 1s,
+  # success_threshold 1, and failure_threshold 3. An HTTP probe is written the
+  # same way:
+  #
+  #   readiness:
+  #     http: {url: "http://127.0.0.1:8080/ready", expected_status: [200, 204],
+  #            period: 500ms, timeout: 250ms}
+  - id: cache
+    type: process
+    with:
+      label: cache
+      script: |
+        state="$1"
+        sleep 0.3
+        printf ready > "$state/cache.ready"
+        while :; do sleep 0.2; done
+      args: ["{{ .steps.state.path }}"]
+      # Nothing useful to read from this one.
+      stdout: discard
+      readiness:
+        exec:
+          command: test
+          args: ["-f", "{{ .steps.state.path }}/cache.ready"]
+          period: 100ms
+          timeout: 500ms
+          failure_threshold: 50
+
+  # --- 3. calling a process -------------------------------------------------
+  # `rpc: jsonl` turns a managed process into a request/response worker. The
+  # worker reads ONE JSON request per line from stdin and writes ONE correlated
+  # response per line to stdout. Stdout is reserved for the protocol and is
+  # never printed, so application logs belong on stderr - and with log
+  # readiness the ready line must therefore go to stderr too.
+  #
+  #   request   {"id":"call_x","payload":{...}}
+  #   response  {"id":"call_x","result":{...}}   or   {"id":"call_x","error":{"message":"..."}}
+  #
+  # IDs must come back unchanged. Malformed messages and unknown IDs are
+  # protocol failures and enter the restart policy. Calls are never replayed
+  # after a request has been written: one routed to a worker in the instant it
+  # exited fails with "process RPC session closed" rather than running twice.
+  - id: renderer
+    type: process
+    with:
+      label: renderer
+      script: |
+        printf 'renderer: ready\n' >&2
+        while IFS= read -r line; do
+          id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+          word=$(printf '%s' "$line" | sed -n 's/.*"word":"\([^"]*\)".*/\1/p')
+          upper=$(printf '%s' "$word" | tr '[:lower:]' '[:upper:]')
+          printf '{"id":"%s","result":{"rendered":"<b>%s</b>"}}\n' "$id" "$upper"
+        done
+      rpc: jsonl
+      readiness:
+        log: {pattern: "renderer: ready", timeout: 20s}
+      restart: {policy: on_failure, max_restarts: 3}
+
+  # `process_call` returns `result` and the selected `worker_id`. `payload`
+  # takes any YAML/JSON-compatible value; `payload_expr` takes a typed
+  # expression instead when the whole payload is computed.
+  - id: render_one
+    type: process_call
+    with:
+      worker: "{{ .steps.renderer.worker_id }}"
+      payload:
+        word: wuko
+      timeout: 10s
+
+  - id: report_render
+    type: shell
+    with:
+      command: printf
+      args:
+        - "single worker %s returned %s\n"
+        - "{{ .steps.render_one.worker_id }}"
+        - "{{ .steps.render_one.result.rendered }}"
+
+  # --- 4. a pool ------------------------------------------------------------
+  # Collect worker IDs from a foreach and pass the resulting list as the direct
+  # `pool` expression. A pool call fairly selects an available worker and
+  # permits one in-flight request per worker; each pool rotates independently
+  # of every other pool and of single-worker calls. If every worker is busy or
+  # restarting it waits within `timeout` (30s by default), and a worker whose
+  # service has ended simply leaves the pool.
+  - id: renderers
+    foreach:
+      items: '0..vars.workers - 1'
+      max_concurrency: 4
+      collect: steps.worker.worker_id
+      steps:
+        - id: worker
+          type: process
+          with:
+            label: "renderer-{{ .foreach.index }}"
+            script: |
+              slot="$1"
+              printf 'worker %s ready\n' "$slot" >&2
+              while IFS= read -r line; do
+                id=$(printf '%s' "$line" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')
+                word=$(printf '%s' "$line" | sed -n 's/.*"word":"\([^"]*\)".*/\1/p')
+                printf '{"id":"%s","result":{"rendered":"%s","slot":"%s"}}\n' "$id" "$word" "$slot"
+              done
+            args: ["{{ .foreach.index }}"]
+            rpc: jsonl
+            readiness:
+              log: {pattern: "ready", timeout: 20s}
+
+  - id: rendered
+    foreach:
+      items: vars.words
+      collect: steps.call.result
+      steps:
+        - id: call
+          type: process_call
+          with:
+            pool: steps.renderers.results
+            payload_expr: '{"word": foreach.item}'
+            timeout: 10s
+
+  - id: report_pool
+    type: shell
+    with:
+      script: 'printf "pool of %s workers rendered %s payloads: %s\n" "$1" "$2" "$3"'
+      args:
+        - "{{ len .steps.renderers.results }}"
+        - "{{ .steps.rendered.count }}"
+        - >-
+          {{ range .steps.rendered.results }}{{ .rendered }}@{{ .slot }} {{ end }}
+
+  # --- what is deliberately not here ----------------------------------------
+  # `keep_alive: true` keeps the scope open after foreground work, which is how
+  # a development server is written - the run then lasts until the server exits
+  # or you interrupt Wuko. It is left out so this package terminates:
+  #
+  #   - id: web
+  #     type: process
+  #     with:
+  #       command: npm
+  #       args: [run, dev]
+  #       keep_alive: true
+  #       readiness: {log: {pattern: "Local:.*http", timeout: 30s}}
+  #
+  # Liveness begins after readiness and a failed threshold terminates the
+  # current program and enters the same restart policy as an unexpected exit,
+  # running `shutdown.command` before the replacement starts:
+  #
+  #       liveness:
+  #         exec: {command: ./health, period: 5s, timeout: 1s, failure_threshold: 3}
+
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s: api and cache still running; %s pooled workers served %s calls\n"
+        - "{{ .workflow.name }}"
+        - "{{ len .steps.renderers.results }}"
+        - "{{ .steps.rendered.count }}"
+
+# Services stop BEFORE workflow `finally`, while their committed startup
+# outputs remain readable here.
+finally:
+  - id: stopped
+    type: shell
+    with:
+      command: printf
+      args:
+        - "api (%s) and every worker were stopped before finally ran\n"
+        - "{{ .steps.api.label }}"

@@ -1,0 +1,401 @@
+version: 1
+package_version: 1.0.0
+name: expression-toolbox
+description: Text, parsing, URI, encoding, hashing, number, and secure-generator helpers in templates, Expr, and Lua
+
+# Every helper below exists in all three languages with one shape each:
+#
+#   Go template   {{ value | truncate 72 "..." }}     value-last pipeline
+#   Expr          truncate(value, 72, "...")          value-first call
+#   Lua           wuko.helpers.truncate(value, ...)   snake_case names
+#
+# They cannot read the environment or filesystem, run commands, reach the
+# network, or quote shell source. Hashes are deterministic; the generator and
+# current-time helpers are the ONLY nondeterministic ones.
+#
+#   wuko run --file .wuko/workflows/expression-toolbox/wuko.yaml
+#   wuko run --file .wuko/workflows/expression-toolbox/wuko.yaml --var search='hello world'
+
+vars:
+  # Deliberately messy input: doubled spaces, a tab, accents, and markup.
+  headline: "  The   <b>café</b>\tre-opens\ttomorrow  "
+  search: "hello world & wuko"
+  payload: '{"service":"catalog","replicas":3,"ratio":0.5,"tags":["eu","stable"]}'
+  configuration: |
+    service: catalog
+    targets:
+      - staging
+      - production
+    retries: 2
+  endpoint: "https://api.example.com:8443/releases/latest?channel=stable&tag=v1&tag=v2#notes"
+  # A real key belongs in a vault - `secret("op://…")` or a protected Lua
+  # argument - never in workflow source. This one is a placeholder.
+  signing_key: "example-signing-key"
+
+steps:
+  # --- text transformations -------------------------------------------------
+  # Line-oriented helpers transform each line independently and preserve the
+  # original \n or \r\n separators. `reverseText`, `truncate`, and `rotate`
+  # count Unicode GRAPHEME CLUSTERS, so combining marks and joined emoji stay
+  # together.
+  - id: cleaned
+    type: set
+    with:
+      variable: cleaned
+      # Arguments may be omitted from the right; the defaults here are tab
+      # width 4 and an empty truncation suffix.
+      expr: 'trim(squeeze(tabsToSpaces(vars.headline, 4)))'
+
+  - id: plain
+    type: set
+    with:
+      variable: plain
+      # stripHTML removes only real tags - a `<` is markup only when a name,
+      # /, !, or ? follows it, so "5 > 3 and 2 < 4" survives intact. It decodes
+      # entities AFTER removing tags, so the result is plain text for humans
+      # and logs, never sanitized HTML: do not inject it back into a page.
+      expr: 'removeAccents(stripHTML(vars.cleaned))'
+
+  - id: headline_forms
+    type: set
+    with:
+      variable: forms
+      expr: |
+        {
+          "truncated": truncate(vars.plain, 20, "..."),
+          "reversed_words": reverseWords(vars.plain),
+          "ascii_only": removeNonASCII(vars.cleaned),
+          "no_punctuation": removePunctuation(vars.plain),
+          "quoted": quote(vars.plain, "\""),
+          "slug": slugify(vars.plain),
+          "literal_pattern": escapeRegex(vars.plain),
+          "nfkc": normalizeUnicode(vars.plain, "nfkc")
+        }
+
+  - id: report_text
+    type: shell
+    with:
+      command: printf
+      args:
+        - "text:\n  cleaned   %s\n  plain     %s\n  truncated %s\n  slug      %s\n  regex     %s\n"
+        - "{{ .vars.cleaned }}"
+        - "{{ .vars.plain }}"
+        - "{{ .vars.forms.truncated }}"
+        - "{{ .vars.forms.slug }}"
+        - "{{ .vars.forms.literal_pattern }}"
+
+  # --- counting -------------------------------------------------------------
+  # Four different answers to "how long is this?". Empty text has zero lines,
+  # and a terminal newline does not add another empty one.
+  - id: sizes
+    type: set
+    with:
+      variable: sizes
+      expr: |
+        {
+          "bytes": countBytes(vars.cleaned),
+          "runes": countRunes(vars.cleaned),
+          "graphemes": countGraphemes(vars.cleaned),
+          "words": countWords(vars.cleaned),
+          "lines": countLines(vars.configuration)
+        }
+
+  - id: report_sizes
+    type: shell
+    with:
+      command: printf
+      args:
+        - "sizes: %s bytes, %s runes, %s graphemes, %s words; the config has %s lines\n"
+        - "{{ .vars.sizes.bytes }}"
+        - "{{ .vars.sizes.runes }}"
+        - "{{ .vars.sizes.graphemes }}"
+        - "{{ .vars.sizes.words }}"
+        - "{{ .vars.sizes.lines }}"
+
+  # --- parsing and serialization --------------------------------------------
+  # `parseJSON` and `parseYAML` return Wuko's own runtime types: JSON integral
+  # values stay integers when they fit in 64 bits, fractional and exponent
+  # values become floats, and YAML mappings must have string keys. Each parser
+  # accepts EXACTLY ONE value or document - trailing whitespace is fine, a
+  # second value or a multi-document YAML stream is not.
+  #
+  # Expr preserves the parsed structure, so member access, indexing, and
+  # collection operations work with no intermediate `decode` step.
+  - id: service
+    type: set
+    with:
+      variable: service
+      expr: 'parseJSON(vars.payload).service'
+
+  - id: parsed_types
+    type: assert
+    with:
+      expr: 'parseJSON(vars.payload).replicas == 3 && parseJSON(vars.payload).tags[0] == "eu"'
+      message: parseJSON should preserve integers and list order
+
+  - id: targets
+    type: set
+    with:
+      variable: targets
+      expr: 'parseYAML(vars.configuration).targets | sortAlpha()'
+
+  # Compose the two directions to normalize one format into another.
+  - id: normalized
+    type: set
+    with:
+      variable: normalized
+      expr: 'toJSONCompact(parseYAML(vars.configuration))'
+
+  - id: report_parsing
+    type: shell
+    with:
+      command: printf
+      args:
+        - "parsing: service=%s targets=%s\n  normalized %s\n"
+        - "{{ .vars.service }}"
+        - "{{ join \", \" .vars.targets }}"
+        - "{{ .vars.normalized }}"
+
+  # `nindent` is a newline plus an indented value, which is what makes embedded
+  # generated configuration line up. Go templates can also parse an object and
+  # keep going through the ordinary collection helpers.
+  - id: manifest
+    type: set
+    with:
+      variable: manifest
+      value: |-
+        service: {{ .vars.payload | parseJSON | get "service" }}
+        labels:{{ .vars.forms | toYAML | nindent 2 }}
+
+  # --- URIs -----------------------------------------------------------------
+  # `parseURI` and `buildURI` never make a request. Parsed objects always carry
+  # scheme, opaque, host, path, query, and fragment; `username` appears only
+  # with userinfo and `password` only with a password delimiter, so an
+  # explicitly empty password stays distinct from none. Query keys map to
+  # ORDERED string lists, so duplicates keep their order.
+  - id: parts
+    type: set
+    with:
+      variable: parts
+      expr: parseURI(vars.endpoint)
+
+  # Building applies the required percent-encoding, sorts query keys for
+  # deterministic output, preserves each key's value order, and uses standard
+  # form encoding (+ for spaces in query values). A query value may be a string
+  # or a list of strings; a list creates repeated parameters. This is semantic
+  # canonicalization, not a byte-for-byte round trip.
+  - id: search_url
+    type: set
+    with:
+      variable: search_url
+      expr: |
+        buildURI({
+          "scheme": "https",
+          "host": vars.parts.host,
+          "path": "/search",
+          "query": {
+            "q": vars.search,
+            "include": ["releases", "prereleases"]
+          }
+        })
+
+  # A scheme and host are not required, so the same helper builds a relative
+  # reference - and an opaque URI such as mailto: uses `opaque` instead of
+  # `host` and `path`.
+  - id: relative
+    type: set
+    with:
+      variable: relative
+      value: '{{ dict "path" "/search" "query" (dict "q" .vars.search) | buildURI }}'
+
+  - id: report_uri
+    type: shell
+    with:
+      command: printf
+      args:
+        - "uri: host=%s path=%s tags=%s fragment=%s\n  built    %s\n  relative %s\n"
+        - "{{ .vars.parts.host }}"
+        - "{{ .vars.parts.path }}"
+        - "{{ join \",\" .vars.parts.query.tag }}"
+        - "{{ .vars.parts.fragment }}"
+        - "{{ .vars.search_url }}"
+        - "{{ .vars.relative }}"
+
+  # --- encoding and hashing -------------------------------------------------
+  # Base64 options are `alphabet` (standard or url) and `padding` (default
+  # true); decoding applies both strictly and rejects binary results that are
+  # not valid UTF-8. `urlEncode` encodes ONE URI component - it keeps only RFC
+  # 3986 unreserved bytes and writes spaces as %20 - so use `buildURI` for a
+  # whole URI.
+  - id: encodings
+    type: set
+    with:
+      variable: encodings
+      expr: |
+        {
+          "base64": base64Encode(vars.search),
+          "base64url": base64Encode(vars.search, {"alphabet": "url", "padding": false}),
+          "hex": hexEncode(vars.search, true),
+          "component": urlEncode(vars.search),
+          "html": htmlEncode("<b>" + vars.service + "</b>")
+        }
+
+  - id: base64_round_trip
+    type: assert
+    with:
+      expr: 'base64Decode(vars.encodings.base64) == vars.search && hexDecode(hexEncode(vars.search)) == vars.search'
+      message: base64 and hex encoding should round-trip unchanged
+
+  # MD5 and SHA-1 are compatibility checksums and must not be used for
+  # security. `encoding` is hex (default) or base64, and `uppercase` applies
+  # only to hex - combining it with base64 is rejected rather than ignored.
+  - id: digests
+    type: set
+    with:
+      variable: digests
+      expr: |
+        {
+          "sha256": sha256(vars.payload),
+          "sha512_b64": sha512(vars.payload, {"encoding": "base64"}),
+          "signature": hmacSHA256(vars.payload, vars.signing_key)
+        }
+
+  - id: report_encoding
+    type: shell
+    with:
+      command: printf
+      args:
+        - "encoding:\n  base64url %s\n  component %s\n  sha256    %s\n  hmac      %s\n"
+        - "{{ .vars.encodings.base64url }}"
+        - "{{ .vars.encodings.component }}"
+        - "{{ .vars.digests.sha256 }}"
+        - "{{ .vars.digests.signature }}"
+
+  # --- numbers --------------------------------------------------------------
+  # `baseConvert` covers bases 2 through 36 and arbitrary-size integers. Roman
+  # numerals cover 1 through 3999, and decoding rejects non-canonical forms.
+  - id: numbers
+    type: set
+    with:
+      variable: numbers
+      expr: |
+        {
+          "binary": baseConvert("255", 10, 2),
+          "hex": baseConvert("255", 10, 16, true),
+          "back": baseConvert("ff", 16, 10),
+          "roman": romanEncode(2026),
+          "decoded": romanDecode("MMXXVI"),
+          "place": ordinal(22)
+        }
+
+  - id: report_numbers
+    type: shell
+    with:
+      command: printf
+      args:
+        - "numbers: 255 = %s binary = 0x%s (back to %s); 2026 = %s = %s; 22 is the %s\n"
+        - "{{ .vars.numbers.binary }}"
+        - "{{ .vars.numbers.hex }}"
+        - "{{ .vars.numbers.back }}"
+        - "{{ .vars.numbers.roman }}"
+        - "{{ .vars.numbers.decoded }}"
+        - "{{ .vars.numbers.place }}"
+
+  # --- secure generators and the clock --------------------------------------
+  # Each generator call and each clock call is evaluated INDEPENDENTLY, so a
+  # value that must be reused has to be captured once. UUIDs default to v4; the
+  # options are version (4 or 7), uppercase, and compact. Token encodings are
+  # hex, padded base64, and unpadded base64url. Password groups lower, upper,
+  # digits, and symbols are all enabled by default, at least one must remain,
+  # and every enabled group is guaranteed to occur.
+  - id: run_id
+    type: set
+    with:
+      variable: run_id
+      expr: 'uuid({"version": 7})'
+
+  - id: credentials
+    type: set
+    with:
+      variable: credentials
+      expr: |
+        {
+          "suffix": randomString(8, "abcdefghijklmnopqrstuvwxyz0123456789"),
+          "token": randomToken(16, "base64url"),
+          "passphrase": password(24, {"symbols": false, "exclude_ambiguous": true}),
+          "shard": randomInt(1, 8)
+        }
+
+  # `currentTime()` and `unixTimestamp()` are the explicit, documented
+  # nondeterministic boundaries. Expr's implicit `now()` builtin stays
+  # DISABLED and fails to compile with `unknown name now`; for reproducible or
+  # --var-overridable time, use the `time` step (see the recordable-time
+  # package) rather than these.
+  - id: stamp
+    type: set
+    with:
+      variable: stamp
+      expr: '{"at": currentTime(), "unix": unixTimestamp(), "millis": unixTimestamp("milliseconds")}'
+
+  - id: report_generated
+    type: shell
+    with:
+      command: printf
+      args:
+        - "generated: run=%s shard=%s suffix=%s token-length=%s at %s\n"
+        - "{{ .vars.run_id }}"
+        - "{{ .vars.credentials.shard }}"
+        - "{{ .vars.credentials.suffix }}"
+        - "{{ len .vars.credentials.token }}"
+        - "{{ .vars.stamp.at }}"
+
+  # --- and all of it in Lua -------------------------------------------------
+  # Lua uses snake_case, calls the repeat helper `repeat_text` because `repeat`
+  # is a Lua keyword, and deliberately does NOT expose parse_json or parse_yaml
+  # - its own `wuko.json.decode` covers JSON input.
+  - id: digest_report
+    type: lua
+    with:
+      source: |
+        local h = wuko.helpers
+        local record = wuko.json.decode(wuko.args.payload)
+
+        local summary = h.truncate(h.squeeze(wuko.args.headline), 40, "…")
+        local banner = h.repeat_text("-", 12, "")
+        local endpoint = h.build_uri({
+          scheme = "https",
+          host = "api.example.com",
+          path = "/services/" .. record.service,
+          query = {replicas = tostring(record.replicas), tag = {"eu", "stable"}},
+        })
+
+        wuko.output("summary", summary)
+        wuko.output("banner", banner)
+        wuko.output("endpoint", endpoint)
+        wuko.output("host", h.parse_uri(endpoint).host)
+        wuko.output("fingerprint", h.sha256(endpoint, {encoding = "base64"}))
+      args:
+        payload:
+          expr: vars.payload
+        headline:
+          expr: vars.headline
+
+  - id: report_lua
+    type: shell
+    with:
+      command: printf
+      args:
+        - "lua:\n  %s\n  summary %s\n  built   %s\n  host    %s\n"
+        - "{{ .steps.digest_report.banner }}"
+        - "{{ .steps.digest_report.summary }}"
+        - "{{ .steps.digest_report.endpoint }}"
+        - "{{ .steps.digest_report.host }}"
+
+  - id: summary
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s: %s\n"
+        - "{{ .workflow.name }}"
+        - "{{ .vars.manifest }}"

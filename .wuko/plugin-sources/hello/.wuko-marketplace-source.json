@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "local",
+  "description": "An uppercase step, a local executor, and a slug helper"
+}

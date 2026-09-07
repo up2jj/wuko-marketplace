@@ -136,10 +136,9 @@ steps:
             variable: tick
             format: "15:04:05.000"
 
+        # A fixed delay is the body-less `attempt` form.
         - id: pause
-          type: wait
-          with:
-            duration: 200ms
+          attempt: {duration: 200ms}
 
   - id: elapsed
     type: shell

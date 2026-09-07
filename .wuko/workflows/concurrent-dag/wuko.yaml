@@ -69,16 +69,22 @@ steps:
         # --- two edges, merged in dependency then declaration order --------
         # `unit` sees `deps` and `toolchain`, but never `lint`: unrelated
         # siblings stay invisible even after they succeed.
+        # An execution policy is spelled `attempt`, even here: the control
+        # wraps a body, carries the `needs` edge, and publishes the body under
+        # its own id - so downstream children read
+        # `steps.unit.steps.run_tests`, never `steps.run_tests`.
         - id: unit
-          type: shell
           needs: [deps, toolchain]
-          retry:
+          attempt:
             max_attempts: 2
-          with:
-            command: sh
-            args:
-              - "-c"
-              - "printf 'testing %s on %s\\n' '{{ .steps.deps.stdout }}' '{{ .vars.toolchain }}'; {{ if .vars.break_unit }}exit 1{{ end }}"
+            steps:
+              - id: run_tests
+                type: shell
+                with:
+                  command: sh
+                  args:
+                    - "-c"
+                    - "printf 'testing %s on %s\\n' '{{ .steps.deps.stdout }}' '{{ .vars.toolchain }}'; {{ if .vars.break_unit }}exit 1{{ end }}"
 
         # --- a skipped prerequisite still satisfies its edge ---------------
         # With --var run_integration=false this child is condition-skipped. It
@@ -103,7 +109,7 @@ steps:
               - "{{ .vars.revision }}"
               - "{{ .vars.toolchain }}"
               - "{{ .steps.lint.exit_code }}"
-              - "{{ .steps.unit.exit_code }}"
+              - "{{ .steps.unit.steps.run_tests.exit_code }}"
 
   # Child results and variables are committed to the surrounding namespace in
   # declaration order, and only after the whole group succeeds. Variable

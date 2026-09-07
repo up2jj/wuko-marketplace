@@ -1,0 +1,176 @@
+version: 1
+package_version: 1.0.0
+name: vault-secrets
+description: Resolve 1Password and Bitwarden references with secret(), guarded so the workflow still runs without a provider CLI
+
+# `secret("<reference>")` fetches one value through the 1Password or Bitwarden
+# CLI. Nothing is fetched while the workflow loads: the lookup happens when the
+# template or expression around it runs, and each distinct reference is fetched
+# once per workflow occurrence and reused from then on.
+#
+#   op://<vault>/<item>/<field>        -> op read --no-newline
+#   bw://<selector>/<item>             -> bw get <selector> <item>
+#     selectors: password, username, uri, totp, notes
+#     percent-encode spaces: bw://password/Container%20Registry
+#
+# This example is portable: it looks the vault up only when the Bitwarden CLI is
+# installed and unlocked, and otherwise reports why it skipped. It is the one
+# package here that talks to an external CLI at all.
+#
+#   wuko run --file .wuko/workflows/vault-secrets/wuko.yaml
+#   wuko run --file .wuko/workflows/vault-secrets/wuko.yaml \
+#     --var password_reference=bw://password/GitHub
+#   wuko run --file .wuko/workflows/vault-secrets/wuko.yaml --debug
+#
+# Under --debug the trace shows `<redacted>` where a resolved value would be:
+# Wuko rewrites values it resolved out of diagnostics and error messages. That
+# covers what Wuko prints, not what a step prints - see "handling" below.
+
+# --- authentication preflight ------------------------------------------------
+# A `secrets:` block checks each provider before the run starts (`op whoami`,
+# `bw status`), so a workflow fails at the front instead of half way through.
+# It is left commented out here only to keep the package runnable on a machine
+# with no provider CLI - uncomment it in a real workflow:
+#
+# secrets:
+#   ensure_auth:
+#     # Check-only: no `login`, so the run stops unless op is already signed in.
+#     - provider: op
+#       login:
+#         # Attempted only on an interactive terminal. A token handed back by
+#         # `op signin` is stored as OP_SESSION_<account>, which requires a
+#         # single configured account; the desktop app integration needs none.
+#         native: true
+#     - provider: bw
+#       login:
+#         native: true
+#         # For headless runs. Trimmed stdout of the fallback is kept in the
+#         # provider's private environment under `session_env` - it never
+#         # reaches workflow `env` and no step inherits it. `args` arrive as
+#         # $1, $2, ... when `script` is used instead of `command`.
+#         fallback:
+#           script: 'bw unlock --passwordenv BW_PASSWORD --raw'
+#           session_env: BW_SESSION
+#
+# The preflight belongs to execution: `wuko run`, `wuko ui`, and the install and
+# uninstall lifecycles perform it. `wuko validate` and `wuko tree` never do, so
+# inspecting a workflow cannot trigger a login prompt or run a login script.
+
+vars:
+  item: Container Registry
+  # A reference is a URI: percent-encode spaces and other URI characters in the
+  # item name. Both point at the same item, one field each.
+  password_reference: bw://password/Container%20Registry
+  username_reference: bw://username/Container%20Registry
+
+steps:
+  # --- decide whether a lookup is possible at all ----------------------------
+  # `secret()` reports the provider CLI's own failure, so a workflow that must
+  # survive an unavailable vault decides up front rather than catching later.
+  - id: probe
+    type: shell
+    with:
+      command: sh
+      args:
+        - "-c"
+        - |
+          if ! command -v bw >/dev/null 2>&1; then printf missing; exit 0; fi
+          status=$(bw status 2>/dev/null) || { printf unreachable; exit 0; }
+          state=$(printf %s "$status" | sed -n 's/.*"status":"\([^"]*\)".*/\1/p')
+          printf %s "${state:-unknown}"
+      # Without `stdout: capture` the output goes to the terminal and
+      # `.steps.probe.stdout` stays empty.
+      stdout: capture
+
+  - id: vault_state
+    type: set
+    with:
+      variable: vault
+      value: "{{ .steps.probe.stdout }}"
+
+  - id: unavailable
+    type: shell
+    if: vars.vault != "unlocked"
+    with:
+      command: printf
+      args:
+        - "bitwarden reports %s - skipping the lookup; `bw login && bw unlock` enables it\n"
+        - "{{ .vars.vault }}"
+
+  - if: vars.vault == "unlocked"
+    steps:
+      # --- resolving ------------------------------------------------------
+      # In an expression, `secret()` is an ordinary function, so the reference
+      # is data and can come from a var, a step output, or a dependency. `set`
+      # publishes the result as `.vars.<name>`.
+      - id: lookup
+        type: set
+        with:
+          variable: registry_password
+          expr: secret(vars.password_reference)
+
+      # A different reference - another field of the same item - is a separate
+      # lookup. The same reference twice is answered from the occurrence cache
+      # without a second `bw get`, as the condition further down shows.
+      - id: lookup_username
+        type: set
+        with:
+          variable: registry_user
+          expr: secret(vars.username_reference)
+
+      # In a template the same helper is written `{{ secret "..." }}`, which is
+      # what workflow-level `env:` uses:
+      #
+      #   env:
+      #     REGISTRY_PASSWORD: '{{ secret "op://Production/Registry/password" }}'
+      #
+      # Workflow `env` renders while the workflow loads, before any step runs,
+      # so a reference placed there is resolved on every run and cannot be
+      # guarded by a condition. Keep optional lookups in steps, as here.
+
+      # --- handling -------------------------------------------------------
+      # Redaction covers Wuko's own diagnostics and errors. Workflow stdout,
+      # files, and step outputs are yours to keep clean: report the shape of a
+      # value rather than the value.
+      - id: shape
+        type: shell
+        with:
+          command: printf
+          args:
+            - "resolved %s: user=%s password=%s characters\n"
+            - "{{ .vars.item }}"
+            - "{{ .vars.registry_user }}"
+            - "{{ len .vars.registry_password }}"
+
+      # Hand a secret to a child process through the environment rather than
+      # through `args`: arguments are visible to anything that can list
+      # processes. An `env:` block scopes it to the steps that need it.
+      - env:
+          REGISTRY_PASSWORD: "{{ .vars.registry_password }}"
+        steps:
+          - id: consume
+            type: shell
+            with:
+              command: sh
+              args:
+                - "-c"
+                - 'printf "child process sees %s characters on REGISTRY_PASSWORD\n" "${#REGISTRY_PASSWORD}"'
+
+      # A condition may resolve a secret too - useful to branch on a field
+      # being present. This one is already cached, so it costs nothing.
+      - id: has_password
+        type: shell
+        if: 'secret(vars.password_reference) != ""'
+        with:
+          command: printf
+          args: ["the item carries a password field\n"]
+
+# Cleanup can resolve secrets as well: the provider session is deliberate about
+# outliving the run context, so a `finally` step still reaches the vault after
+# the run is cancelled with Ctrl-C.
+finally:
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args: ["vault state was %s\n", "{{ .vars.vault }}"]
