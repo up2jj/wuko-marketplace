@@ -1,7 +1,7 @@
 # Wuko workflow marketplace
 
 A version-1 archive marketplace of runnable [Wuko](https://github.com/up2jj/wuko) workflows and
-one executable plugin. Each package demonstrates one capability of the engine, and every example
+executable plugins. Each package demonstrates one capability of the engine, and every example
 is self-contained: POSIX shell builtins and Wuko's own steps only, with no network calls,
 containers, or coding agents. `vault-secrets` is the one exception, and a guarded one: it reaches
 for the Bitwarden CLI when the machine has one and skips the lookup when it does not.
@@ -32,6 +32,7 @@ Remove one with `wuko uninstall NAME`.
 | [`probe-exit-codes`](.wuko/workflows/probe-exit-codes/wuko.yaml) | `shell.allowed_exit_codes` plus `stdout`/`stderr` capture policies | v0.9.0 |
 | [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / v0.11.0 |
 | [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / v0.11.0 |
+| [`cue-eval`](.wuko/workflows/cue-eval/wuko.yaml) | CUE constraints, defaults, comprehensions, policy validation, and typed step outputs | plugin |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
 | [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
 | [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | unreleased |
@@ -147,12 +148,13 @@ wuko run --file .wuko/workflows/scripted-pty/wuko.yaml --var handoff=true
 
 ## Plugins
 
-The marketplace also publishes one executable plugin. Plugins are persistent programs that
+The marketplace also publishes executable plugins. Plugins are persistent programs that
 exchange newline-delimited JSON with Wuko over stdin and stdout and contribute namespaced steps,
 executors, and helpers.
 
 | Plugin | Provides | Platforms |
 | --- | --- | --- |
+| `cue` | The `cue.eval` step for typed CUE evaluation and policy validation | darwin and linux on amd64 and arm64 |
 | `hello` | The `hello.uppercase` step, the `hello.local` executor, and the `hello_slug` helper | darwin and linux on amd64 and arm64 |
 
 ```sh
@@ -161,6 +163,10 @@ wuko plugin install --global https://github.com/up2jj/wuko-marketplace
 
 # Non-interactive
 wuko plugin install --global --package hello https://github.com/up2jj/wuko-marketplace
+
+# Install CUE evaluation plus its runnable example
+wuko plugin install --global --package cue https://github.com/up2jj/wuko-marketplace
+wuko install --package cue-eval https://github.com/up2jj/wuko-marketplace
 
 wuko plugin uninstall --global hello
 ```
@@ -179,6 +185,34 @@ steps:
     type: hello.uppercase
     with: {value: hello}
 ```
+
+`cue.eval` accepts either inline `source` or one workflow-relative `.cue` file and publishes the
+concrete top-level CUE `output` at `.steps.<id>.value`:
+
+```yaml
+steps:
+  - id: plan
+    type: cue.eval
+    with:
+      source: |
+        #Port: int & >=1 & <=65535
+        output: {
+          service: "api-\(wuko.vars.environment)"
+          port: #Port & wuko.vars.port
+        }
+
+  - id: policy
+    type: cue.eval
+    with:
+      file: policy.cue
+```
+
+The read-only `wuko` snapshot exposes inputs, variables, environment, earlier step and dependency
+outputs, workflow and run directories, and attempt metadata. This makes the step useful for schema
+validation, policy enforcement, defaults and unification, normalization, generated matrices, and
+typed transformations. Version 0.1.0 intentionally evaluates one self-contained source: native CUE
+workflow files, CUE module loading, specialized steps such as `cue.validate`, and CUE-backed helper
+functions remain future extensions.
 
 A workflow that must pin an exact release declares it instead, which is also the only way a
 plugin contributes template helpers:
@@ -258,6 +292,7 @@ plugins/<ns>/plugin.json             # generated public plugin release manifest
 plugins/<ns>/dist/*.tar.gz           # generated public platform archives
 .wuko/workflows/<name>/wuko.yaml     # workflow package sources
 .wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
+plugin-src/cue/                       # maintained source for the CUE plugin
 ```
 
 `.wuko/plugin-sources/` is deliberately *not* `.wuko/plugins/`, which is the local plugin
@@ -287,10 +322,18 @@ wuko marketplace build
 wuko marketplace build --check
 ```
 
-Plugin releases are imported rather than built here. Build the release in the plugin project,
-then import it transactionally:
+Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE
+plugin source is maintained in this repository, while other plugin projects may live beside it.
+Build a complete release first, then import it transactionally:
 
 ```sh
+cd plugin-src/cue && just release 0.1.0
+cd ../..
+wuko marketplace plugin update cue ./plugin-src/cue
+wuko marketplace build
+
+# Use `plugin add --description ...` only for a namespace's first import.
+# A sibling plugin project works the same way:
 cd ../wuko-plugin-hello && just release 0.1.0
 
 cd ../wuko-marketplace

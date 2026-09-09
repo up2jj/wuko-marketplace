@@ -1,0 +1,53 @@
+version: 1
+package_version: 1.0.0
+name: cue-eval
+description: Validate, default, normalize, and generate typed configuration with the cue.eval plugin
+
+# Install the plugin before running this workflow:
+#
+#   wuko plugin install --global --package cue https://github.com/up2jj/wuko-marketplace
+#   wuko run --file .wuko/workflows/cue-eval/wuko.yaml
+
+vars:
+  environment: staging
+  replicas: 3
+  regions: [eu-central-1, us-east-1]
+
+steps:
+  - id: plan
+    type: cue.eval
+    with:
+      source: |
+        #Deployment: {
+          name: string
+          replicas: int & >=1 & <=10
+          labels: {managed_by: *"wuko" | string}
+        }
+
+        plan: #Deployment & {
+          name: "api-\(wuko.vars.environment)"
+          replicas: wuko.vars.replicas
+        }
+
+        output: {
+          deployment: plan
+          targets: [for item in wuko.vars.regions {
+            region: item
+            service: plan.name
+          }]
+        }
+
+  - id: policy
+    type: cue.eval
+    with:
+      file: policy.cue
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "%s replicas of %s passed policy for %s targets\n"
+        - "{{ .steps.policy.value.deployment.replicas }}"
+        - "{{ .steps.policy.value.deployment.name }}"
+        - "{{ len .steps.policy.value.targets }}"

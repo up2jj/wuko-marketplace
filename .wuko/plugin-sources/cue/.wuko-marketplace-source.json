@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "local",
+  "description": "Evaluate and validate typed CUE values in Wuko workflows"
+}
