@@ -8,6 +8,9 @@ for the Bitwarden CLI when the machine has one and skips the lookup when it does
 
 ## Install
 
+The current catalog is tested against [Wuko v0.13.0](https://github.com/up2jj/wuko/releases/tag/v0.13.0).
+The `Since` column below records the first Wuko release that supports each example.
+
 ```sh
 # Interactive picker over every package
 wuko install https://github.com/up2jj/wuko-marketplace
@@ -32,22 +35,22 @@ Remove one with `wuko uninstall NAME`.
 | [`probe-exit-codes`](.wuko/workflows/probe-exit-codes/wuko.yaml) | `shell.allowed_exit_codes` plus `stdout`/`stderr` capture policies | v0.9.0 |
 | [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / v0.11.0 |
 | [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / v0.11.0 |
-| [`cue-eval`](.wuko/workflows/cue-eval/wuko.yaml) | CUE constraints, defaults, comprehensions, policy validation, and typed step outputs | plugin |
+| [`cue-eval`](.wuko/workflows/cue-eval/wuko.yaml) | CUE constraints, defaults, comprehensions, policy validation, and typed step outputs | v0.13.0 + plugin |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
 | [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
-| [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | unreleased |
-| [`scoped-environments`](.wuko/workflows/scoped-environments/wuko.yaml) | `env:` blocks: nesting, restoration on exit, and what `defer` and `finally` see | unreleased |
-| [`structured-edit`](.wuko/workflows/structured-edit/wuko.yaml) | The `edit` step: JSONPath selection over JSON, YAML, and TOML with comments preserved | unreleased |
-| [`durable-state`](.wuko/workflows/durable-state/wuko.yaml) | `key_value` `expr`, atomic `update`, `variable`, `default`, `prefix`, and `clear` | unreleased |
-| [`run-once`](.wuko/workflows/run-once/wuko.yaml) | `once` blocks: keyed idempotency, replayed results, and `on_busy: wait` | unreleased |
-| [`recordable-time`](.wuko/workflows/recordable-time/wuko.yaml) | The `time` step, `workflow.timezone`, and the pure `parseTime`/`addTime`/`formatTime` helpers | unreleased |
-| [`vault-secrets`](.wuko/workflows/vault-secrets/wuko.yaml) | `secret()` in templates, expressions, and conditions, the per-occurrence cache, and the `secrets.ensure_auth` preflight | unreleased |
-| [`attempt-control`](.wuko/workflows/attempt-control/wuko.yaml) | `attempt`: one control for timeout, retry, and polling — isolated passes, `when` vs `until`, and at-least-once effects | unreleased |
-| [`observe-and-react`](.wuko/workflows/observe-and-react/wuko.yaml) | `observe`: background bodies driven by filesystem and shell sources, with `ignore`, `debounce`, `on_change`, and `on_error` | unreleased |
-| [`managed-process`](.wuko/workflows/managed-process/wuko.yaml) | `process` services with log and exec readiness, plus `rpc: jsonl` workers called through `process_call` and a pool | unreleased |
-| [`git-history`](.wuko/workflows/git-history/wuko.yaml) | `git_revision`, `git_merge_base`, `git_log`, `git_diff`, and `git_diff_check` as structured data | unreleased |
-| [`commit-policy`](.wuko/workflows/commit-policy/wuko.yaml) | `git_conventional_commit` create and validate, `git_commit` with trailers and identities, and the commit-message helpers | unreleased |
-| [`expression-toolbox`](.wuko/workflows/expression-toolbox/wuko.yaml) | Text, parsing, URI, encoding, hashing, number, and secure-generator helpers across templates, Expr, and Lua | unreleased |
+| [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | v0.12.0 |
+| [`scoped-environments`](.wuko/workflows/scoped-environments/wuko.yaml) | `env:` blocks: nesting, restoration on exit, and what `defer` and `finally` see | v0.12.0 |
+| [`structured-edit`](.wuko/workflows/structured-edit/wuko.yaml) | The `edit` step: JSONPath selection over JSON, YAML, and TOML with comments preserved | v0.12.0 |
+| [`durable-state`](.wuko/workflows/durable-state/wuko.yaml) | `key_value` `expr`, atomic `update`, `variable`, `default`, `prefix`, and `clear` | v0.12.0 |
+| [`run-once`](.wuko/workflows/run-once/wuko.yaml) | `once` blocks: keyed idempotency, replayed results, and `on_busy: wait` | v0.12.0 |
+| [`recordable-time`](.wuko/workflows/recordable-time/wuko.yaml) | The `time` step, `workflow.timezone`, and the pure `parseTime`/`addTime`/`formatTime` helpers | v0.12.0 |
+| [`vault-secrets`](.wuko/workflows/vault-secrets/wuko.yaml) | `secret()` in templates, expressions, and conditions, the per-occurrence cache, and the `secrets.ensure_auth` preflight | v0.13.0 |
+| [`attempt-control`](.wuko/workflows/attempt-control/wuko.yaml) | `attempt`: one control for timeout, retry, and polling — isolated passes, `when` vs `until`, and at-least-once effects | v0.13.0 |
+| [`observe-and-react`](.wuko/workflows/observe-and-react/wuko.yaml) | `observe`: background bodies driven by filesystem and shell sources, with `ignore`, `debounce`, `on_change`, and `on_error` | v0.13.0 |
+| [`managed-process`](.wuko/workflows/managed-process/wuko.yaml) | `process` services with log and exec readiness, plus `rpc: jsonl` workers called through `process_call` and a pool | v0.13.0 |
+| [`git-history`](.wuko/workflows/git-history/wuko.yaml) | `git_revision`, `git_merge_base`, `git_log`, `git_diff`, and `git_diff_check` as structured data | v0.13.0 |
+| [`commit-policy`](.wuko/workflows/commit-policy/wuko.yaml) | `git_conventional_commit` create and validate, `git_commit` with trailers and identities, and the commit-message helpers | v0.13.0 |
+| [`expression-toolbox`](.wuko/workflows/expression-toolbox/wuko.yaml) | Text, parsing, URI, encoding, hashing, number, and secure-generator helpers across templates, Expr, and Lua | v0.13.0 |
 
 ## Running an example without installing
 
@@ -170,6 +173,22 @@ wuko install --package cue-eval https://github.com/up2jj/wuko-marketplace
 
 wuko plugin uninstall --global hello
 ```
+
+To install a specific CUE plugin release globally, address its published manifest through an exact
+marketplace tag or commit. Wuko does not resolve a separate `--version` flag; the Git ref selects
+the release. Use `--reinstall` when replacing an existing global installation:
+
+```sh
+wuko plugin install --global --reinstall \
+  github:up2jj/wuko-marketplace@cue-v0.1.0:plugins/cue/plugin.json
+
+# A full commit SHA is the strongest pin:
+wuko plugin install --global --reinstall \
+  github:up2jj/wuko-marketplace@<commit-sha>:plugins/cue/plugin.json
+```
+
+The selected `plugin.json` declares the informational plugin version and pins every platform
+archive by SHA-256. A tag must be published to GitHub before it can be used as an installation ref.
 
 Installation downloads only the current-platform archive, verifies the manifest digest and the
 archive digest, extracts regular files safely, performs the pure `initialize` handshake, and
@@ -324,25 +343,56 @@ wuko marketplace build --check
 
 Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE
 plugin source is maintained in this repository, while other plugin projects may live beside it.
-Build a complete release first, then import it transactionally:
+Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manifest.json` by hand.
+
+### Releasing a plugin update
+
+Choose the next semantic version before starting. Use a patch release for compatible fixes, a
+minor release for compatible features, and a major release for incompatible contract changes.
+For example, to release CUE plugin `0.1.1`, update and test the maintained source, build all four
+platform artifacts, and import the completed release:
 
 ```sh
-cd plugin-src/cue && just release 0.1.0
+cd plugin-src/cue
+just check
+just build
+just release 0.1.1
+
 cd ../..
 wuko marketplace plugin update cue ./plugin-src/cue
 wuko marketplace build
-
-# Use `plugin add --description ...` only for a namespace's first import.
-# A sibling plugin project works the same way:
-cd ../wuko-plugin-hello && just release 0.1.0
-
-cd ../wuko-marketplace
-wuko marketplace plugin add --description "..." ../wuko-plugin-hello   # first import
-wuko marketplace plugin update hello ../wuko-plugin-hello              # later releases
-wuko marketplace build
+wuko marketplace build --check
 ```
 
-`plugin add` accepts the same local, HTTPS, and pinned `github:` sources as direct installation.
-It downloads every declared platform archive, validates each digest and safe executable
-structure, and commits the import atomically without executing any binary. Failed validation
-leaves the previous import intact.
+`just release` replaces `plugin-src/cue/plugin.json` and its ignored local `dist/` directory.
+`plugin update` verifies every declared archive and digest, then atomically replaces the imported
+release in `.wuko/plugin-sources/cue/`. The final build regenerates `plugins/cue/` and
+`manifest.json`; it also rebuilds `packages/cue-eval.tar.gz` if the example workflow changed.
+
+Before publishing, install the generated marketplace artifact and run the repository validation
+and example workflow. `--reinstall` is required when that namespace is already installed globally:
+
+```sh
+wuko plugin install --global --reinstall ./plugins/cue/plugin.json
+wuko validate
+wuko run --file .wuko/workflows/cue-eval/wuko.yaml
+```
+
+Commit the maintained source and generated marketplace outputs together, then publish a namespaced
+tag so consumers can pin the release:
+
+```sh
+git add plugin-src/cue .wuko/plugin-sources/cue plugins/cue \
+  .wuko/workflows/cue-eval packages/cue-eval.tar.gz manifest.json README.md
+git commit -m "feat(cue): release v0.1.1"
+git tag cue-v0.1.1
+git push origin main
+git push origin cue-v0.1.1
+```
+
+Use `plugin add --description "..." SOURCE` only for a namespace's first import. For every later
+release, use `plugin update NAMESPACE SOURCE`; it preserves the catalog description. Both commands
+accept the same local, HTTPS, and pinned `github:` sources as direct installation. They download
+every declared platform archive, validate each digest and safe executable structure, and commit the
+import atomically without executing any binary. Failed validation leaves the previous import
+intact.

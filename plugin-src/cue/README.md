@@ -17,9 +17,21 @@ Use `file: policy.cue` instead of `source` for a workflow-relative CUE file. Fil
 
 The injected `wuko` object exposes `inputs`, `vars`, `env`, `steps`, `dependencies`, `workflow.name`, `workflow.dir`, `run.dir`, and step attempt metadata. The snapshot is immutable and the step only returns `steps.<id>.value`; it cannot write workflow variables.
 
-Run `just check`, `just build`, and `just release 0.1.0` from this directory. Import the release from the marketplace root with:
+For a release, choose the next semantic version and run the checks before generating artifacts.
+For example, to publish `0.1.1`:
 
 ```sh
+cd plugin-src/cue
+just check
+just build
+just release 0.1.1
+
+cd ../..
 wuko marketplace plugin update cue ./plugin-src/cue
 wuko marketplace build
+wuko marketplace build --check
 ```
+
+Commit `plugin-src/cue/` together with the imported and generated marketplace outputs, then tag the
+marketplace commit as `cue-v0.1.1`. See the marketplace README's “Releasing a plugin update” section
+for the complete verification and publishing checklist.
