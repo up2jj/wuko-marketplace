@@ -101,6 +101,17 @@
       "sha256": "9c123b3b2bf55d44ffbe4562ceb7be97a49c5ce5cac547f306d48a00bdff9981"
     },
     {
+      "name": "local-notifier-demo",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/local-notifier-demo",
+      "path": "packages/local-notifier-demo.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Send portable terminal or desktop notifications with automatic fallback",
+      "source_sha256": "2eac32b357db78d854a43113c8df1185bd2ec199ad16665b223f562d26f04802",
+      "sha256": "3eae99d57abe3dc8d5ee0272bc9bcd64e601de1125e1097fcfcd08f62b43779f"
+    },
+    {
       "name": "lua-typed-args",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/lua-typed-args",
@@ -280,6 +291,33 @@
       "source_sha256": "497b404d0c173a1abc2d5115cdf8092231624e7a76f4356a4f7f39996c09bf2d",
       "path": "plugins/hello/plugin.json",
       "sha256": "18fb646ea1fa6cf9711552764fe008949d40b4a1f1371576d81415131b3aba0c",
+      "platforms": [
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64"
+        },
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        }
+      ]
+    },
+    {
+      "namespace": "local-notifier",
+      "plugin_version": "0.1.0",
+      "description": "Send local terminal or desktop notifications with automatic fallback",
+      "source": ".wuko/plugin-sources/local-notifier",
+      "source_sha256": "01d7c86803f5617c1f7da3eddb2448b5613da3ecc4cd29aa95f649a71bad2250",
+      "path": "plugins/local-notifier/plugin.json",
+      "sha256": "19cd89965b0b85abf50e7e0b506b3aef291d1968cbca1998e00b5a4880f70829",
       "platforms": [
         {
           "os": "darwin",

@@ -1,0 +1,33 @@
+version: 1
+package_version: 1.0.0
+name: local-notifier-demo
+description: Send portable terminal or desktop notifications with automatic fallback
+
+# Install the plugin before running this workflow:
+#
+#   wuko plugin install --global --package local-notifier https://github.com/up2jj/wuko-marketplace
+#   wuko run --file .wuko/workflows/local-notifier-demo/wuko.yaml
+#
+# Select a delivery explicitly with --var delivery=terminal or
+# --var delivery=system. System delivery is strict; auto falls back to the
+# terminal when the local desktop notifier is unavailable.
+
+vars:
+  delivery: auto
+  message: The example workflow completed
+
+steps:
+  - id: notify
+    type: local-notifier.notify
+    with:
+      message: "{{ .vars.message }}"
+      delivery: "{{ .vars.delivery }}"
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "notification used %s (fallback: %s)\n"
+        - "{{ .steps.notify.delivery }}"
+        - "{{ .steps.notify.fallback }}"

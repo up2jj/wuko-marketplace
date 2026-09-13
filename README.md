@@ -36,6 +36,7 @@ Remove one with `wuko uninstall NAME`.
 | [`scripted-pty`](.wuko/workflows/scripted-pty/wuko.yaml) | `shell.interactions` (static and `expr`), `sensitive` sends, and `terminal` styling | v0.10.0 / v0.11.0 |
 | [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / v0.11.0 |
 | [`cue-eval`](.wuko/workflows/cue-eval/wuko.yaml) | CUE constraints, defaults, comprehensions, policy validation, and typed step outputs | v0.13.0 + plugin |
+| [`local-notifier-demo`](.wuko/workflows/local-notifier-demo/wuko.yaml) | Portable terminal and desktop notifications with automatic fallback | v0.13.0 + plugin |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
 | [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
 | [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | v0.12.0 |
@@ -158,6 +159,7 @@ executors, and helpers.
 | Plugin | Provides | Platforms |
 | --- | --- | --- |
 | `cue` | The `cue.eval` step for typed CUE evaluation and policy validation | darwin and linux on amd64 and arm64 |
+| `local-notifier` | The `local-notifier.notify` step for terminal or desktop notifications | darwin and linux on amd64 and arm64 |
 | `hello` | The `hello.uppercase` step, the `hello.local` executor, and the `hello_slug` helper | darwin and linux on amd64 and arm64 |
 
 ```sh
@@ -170,6 +172,10 @@ wuko plugin install --global --package hello https://github.com/up2jj/wuko-marke
 # Install CUE evaluation plus its runnable example
 wuko plugin install --global --package cue https://github.com/up2jj/wuko-marketplace
 wuko install --package cue-eval https://github.com/up2jj/wuko-marketplace
+
+# Install local notifications plus its runnable example
+wuko plugin install --global --package local-notifier https://github.com/up2jj/wuko-marketplace
+wuko install --package local-notifier-demo https://github.com/up2jj/wuko-marketplace
 
 wuko plugin uninstall --global hello
 ```
@@ -203,6 +209,23 @@ steps:
   - id: shout
     type: hello.uppercase
     with: {value: hello}
+```
+
+`local-notifier.notify` accepts a required `message`, an optional `title` that defaults to the
+workflow name, and `delivery: auto|terminal|system`. Terminal delivery streams a plain
+`<title>: <message>` line. System delivery uses `/usr/bin/osascript` on macOS and `notify-send` on
+Linux, where a running desktop notification daemon is also required. `system` fails when the
+notifier is unavailable; the default `auto` mode falls back to the terminal instead. The step
+reports the actual `delivery` plus a boolean `fallback` output. Operating-system notification
+settings may suppress a banner even after a successful submission.
+
+```yaml
+steps:
+  - id: notify
+    type: local-notifier.notify
+    with:
+      message: Build completed
+      delivery: auto
 ```
 
 `cue.eval` accepts either inline `source` or one workflow-relative `.cue` file and publishes the
@@ -312,6 +335,7 @@ plugins/<ns>/dist/*.tar.gz           # generated public platform archives
 .wuko/workflows/<name>/wuko.yaml     # workflow package sources
 .wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
 plugin-src/cue/                       # maintained source for the CUE plugin
+plugin-src/local-notifier/            # maintained source for the local-notifier plugin
 ```
 
 `.wuko/plugin-sources/` is deliberately *not* `.wuko/plugins/`, which is the local plugin
@@ -342,7 +366,8 @@ wuko marketplace build --check
 ```
 
 Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE
-plugin source is maintained in this repository, while other plugin projects may live beside it.
+and local-notifier plugin sources are maintained in this repository, while other plugin projects
+may live beside it.
 Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manifest.json` by hand.
 
 ### Releasing a plugin update

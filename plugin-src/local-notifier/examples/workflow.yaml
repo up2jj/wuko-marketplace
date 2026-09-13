@@ -1,0 +1,18 @@
+version: 1
+name: local-notifier-example
+
+steps:
+  - id: notify
+    type: local-notifier.notify
+    with:
+      message: Build completed
+      delivery: auto
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "notification used %s (fallback: %s)\n"
+        - "{{ .steps.notify.delivery }}"
+        - "{{ .steps.notify.fallback }}"

@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "local",
+  "description": "Send local terminal or desktop notifications with automatic fallback"
+}

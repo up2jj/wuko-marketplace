@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "namespace": "local-notifier",
+  "plugin_version": "0.1.0",
+  "protocol": "wuko.plugin/v1",
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "amd64",
+      "path": "dist/wuko-plugin-local-notifier_Darwin_amd64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-local-notifier",
+      "sha256": "eb50c47850032b93f391b755c3337c759d4aec7a98c953e667a0fe458d72f7b9"
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "dist/wuko-plugin-local-notifier_Darwin_arm64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-local-notifier",
+      "sha256": "95efaaca21a671a25c63f4df6435c0bd502fc15ea66e1988f2c9ae3d3a59b88e"
+    },
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "path": "dist/wuko-plugin-local-notifier_Linux_amd64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-local-notifier",
+      "sha256": "d4fb617ac2508c71902be5a7bed32f7459fb0e7bd4c0815826b6a2628877ad90"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "path": "dist/wuko-plugin-local-notifier_Linux_arm64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-local-notifier",
+      "sha256": "b3e45e274892a40255034578fe1cbc0a0d2877938844342d4b5ac47a036c1a63"
+    }
+  ]
+}
