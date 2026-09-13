@@ -1,5 +1,5 @@
 version: 1
-package_version: 1.0.0
+package_version: 1.1.0
 name: cue-eval
 description: Validate, default, normalize, and generate typed configuration with the cue.eval plugin
 
@@ -12,6 +12,7 @@ vars:
   environment: staging
   replicas: 3
   regions: [eu-central-1, us-east-1]
+  request_id: 9007199254740993
 
 steps:
   - id: plan
@@ -31,6 +32,7 @@ steps:
 
         output: {
           deployment: plan
+          request_id: wuko.vars.request_id
           targets: [for item in wuko.vars.regions {
             region: item
             service: plan.name
@@ -40,14 +42,15 @@ steps:
   - id: policy
     type: cue.eval
     with:
-      file: policy.cue
+      package: policy
 
   - id: report
     type: shell
     with:
       command: printf
       args:
-        - "%s replicas of %s passed policy for %s targets\n"
+        - "%s replicas of %s passed policy for %s targets (request %s)\n"
         - "{{ .steps.policy.value.deployment.replicas }}"
         - "{{ .steps.policy.value.deployment.name }}"
         - "{{ len .steps.policy.value.targets }}"
+        - "{{ .steps.policy.value.request_id }}"

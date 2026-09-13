@@ -1,12 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"math"
-	"math/big"
-	"strconv"
 	"strings"
 
 	"cuelang.org/go/cue"
@@ -15,26 +11,36 @@ import (
 	"cuelang.org/go/cue/parser"
 )
 
-const maxSafeInteger = 9007199254740991
-
 const maxOutputSize = maxFrameSize - 4<<10
 
 func evaluate(job workerJob) (json.RawMessage, error) {
-	if err := validateImports(job.Source, job.Filename); err != nil {
-		return nil, err
-	}
 	ctx := cuecontext.New()
 	scope, err := cueScope(ctx, job.Context, job.Mode == workerModeValidate)
 	if err != nil {
 		return nil, err
 	}
-	program := ctx.CompileString(job.Source, cue.Filename(job.Filename), cue.Scope(scope))
-	if err := program.Err(); err != nil {
-		return nil, formatCUEError(err)
+	var program cue.Value
+	filename := "inline.cue"
+	if job.Configuration.Source != "" {
+		if len(job.Configuration.Source) > maxSourceSize {
+			return nil, fmt.Errorf("inline CUE source exceeds the 1 MiB limit")
+		}
+		if err := validateImports(job.Configuration.Source, filename); err != nil {
+			return nil, err
+		}
+		program = ctx.CompileString(job.Configuration.Source, cue.Filename(filename), cue.Scope(scope))
+		if err := program.Err(); err != nil {
+			return nil, formatCUEError(err)
+		}
+	} else {
+		program, filename, err = loadModuleProgram(ctx, scope, job.Configuration, job.Context.WorkflowDir)
+		if err != nil {
+			return nil, err
+		}
 	}
 	output := program.LookupPath(cue.MakePath(cue.Str("output")))
 	if !output.Exists() {
-		return nil, fmt.Errorf("%s: top-level field output is required", job.Filename)
+		return nil, fmt.Errorf("%s: top-level field output is required", filename)
 	}
 	if err := output.Validate(cue.Concrete(job.Mode == workerModeRun)); err != nil {
 		return nil, formatCUEError(err)
@@ -47,9 +53,6 @@ func evaluate(job workerJob) (json.RawMessage, error) {
 		return nil, formatCUEError(err)
 	}
 	if err := validateOutputSize(data); err != nil {
-		return nil, err
-	}
-	if err := validateJSONNumbers(data); err != nil {
 		return nil, err
 	}
 	return json.RawMessage(data), nil
@@ -67,16 +70,7 @@ func validateImports(source, filename string) error {
 	if err != nil {
 		return formatCUEError(err)
 	}
-	for spec := range file.ImportSpecs() {
-		path, err := strconv.Unquote(spec.Path.Value)
-		if err != nil {
-			return fmt.Errorf("%s: invalid import path %s", filename, spec.Path.Value)
-		}
-		if path == "tool" || strings.HasPrefix(path, "tool/") {
-			return fmt.Errorf("%s: CUE tool packages are not supported: %q", filename, path)
-		}
-	}
-	return nil
+	return validateASTImports(file)
 }
 
 func cueScope(ctx *cue.Context, context stepContext, permissive bool) (cue.Value, error) {
@@ -136,48 +130,4 @@ func formatCUEError(err error) error {
 		details = err.Error()
 	}
 	return fmt.Errorf("CUE evaluation failed: %s", details)
-}
-
-func validateJSONNumbers(data []byte) error {
-	decoder := json.NewDecoder(bytes.NewReader(data))
-	decoder.UseNumber()
-	var value any
-	if err := decoder.Decode(&value); err != nil {
-		return fmt.Errorf("decoding CUE output: %w", err)
-	}
-	return walkJSONNumbers(value, "output")
-}
-
-func walkJSONNumbers(value any, path string) error {
-	switch typed := value.(type) {
-	case map[string]any:
-		for key, child := range typed {
-			if err := walkJSONNumbers(child, path+"."+key); err != nil {
-				return err
-			}
-		}
-	case []any:
-		for index, child := range typed {
-			if err := walkJSONNumbers(child, fmt.Sprintf("%s[%d]", path, index)); err != nil {
-				return err
-			}
-		}
-	case json.Number:
-		text := typed.String()
-		if strings.ContainsAny(text, ".eE") {
-			number, err := typed.Float64()
-			if err != nil || math.IsInf(number, 0) || math.IsNaN(number) {
-				return fmt.Errorf("%s contains a number that cannot cross the JSON protocol safely", path)
-			}
-			return nil
-		}
-		integer := new(big.Int)
-		if _, ok := integer.SetString(text, 10); !ok {
-			return fmt.Errorf("%s contains an invalid integer", path)
-		}
-		if new(big.Int).Abs(integer).Cmp(big.NewInt(maxSafeInteger)) > 0 {
-			return fmt.Errorf("%s integer %s exceeds the JSON safe integer range", path, text)
-		}
-	}
-	return nil
 }

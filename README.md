@@ -186,7 +186,7 @@ the release. Use `--reinstall` when replacing an existing global installation:
 
 ```sh
 wuko plugin install --global --reinstall \
-  github:up2jj/wuko-marketplace@cue-v0.1.0:plugins/cue/plugin.json
+  github:up2jj/wuko-marketplace@cue-v0.2.0:plugins/cue/plugin.json
 
 # A full commit SHA is the strongest pin:
 wuko plugin install --global --reinstall \
@@ -228,8 +228,9 @@ steps:
       delivery: auto
 ```
 
-`cue.eval` accepts either inline `source` or one workflow-relative `.cue` file and publishes the
-concrete top-level CUE `output` at `.steps.<id>.value`:
+`cue.eval` requires Wuko 0.14.0 or newer. It accepts exactly one of inline `source`, a
+workflow-relative `file`, or a workflow-relative `package` directory and publishes the concrete
+top-level CUE `output` at `.steps.<id>.value`:
 
 ```yaml
 steps:
@@ -246,15 +247,17 @@ steps:
   - id: policy
     type: cue.eval
     with:
-      file: policy.cue
+      package: policy
 ```
 
 The read-only `wuko` snapshot exposes inputs, variables, environment, earlier step and dependency
 outputs, workflow and run directories, and attempt metadata. This makes the step useful for schema
 validation, policy enforcement, defaults and unification, normalization, generated matrices, and
-typed transformations. Version 0.1.0 intentionally evaluates one self-contained source: native CUE
-workflow files, CUE module loading, specialized steps such as `cue.validate`, and CUE-backed helper
-functions remain future extensions.
+typed transformations. `file` evaluates one selected file with local module imports, while
+`package` unifies the single CUE package in the selected directory. Built-in and same-module imports
+are supported without registry access; remote dependencies and CUE tool packages are rejected.
+Every file is confined to the workflow tree and limited to 1 MiB, with a 10 MiB total input limit.
+JSON numbers remain exact across the plugin boundary, including integers larger than 2^53.
 
 A workflow that must pin an exact release declares it instead, which is also the only way a
 plugin contributes template helpers:
@@ -374,14 +377,14 @@ Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manif
 
 Choose the next semantic version before starting. Use a patch release for compatible fixes, a
 minor release for compatible features, and a major release for incompatible contract changes.
-For example, to release CUE plugin `0.1.1`, update and test the maintained source, build all four
+For example, to release CUE plugin `0.2.0`, update and test the maintained source, build all four
 platform artifacts, and import the completed release:
 
 ```sh
 cd plugin-src/cue
 just check
 just build
-just release 0.1.1
+just release 0.2.0
 
 cd ../..
 wuko marketplace plugin update cue ./plugin-src/cue
@@ -409,10 +412,10 @@ tag so consumers can pin the release:
 ```sh
 git add plugin-src/cue .wuko/plugin-sources/cue plugins/cue \
   .wuko/workflows/cue-eval packages/cue-eval.tar.gz manifest.json README.md
-git commit -m "feat(cue): release v0.1.1"
-git tag cue-v0.1.1
+git commit -m "feat(cue): release v0.2.0"
+git tag cue-v0.2.0
 git push origin main
-git push origin cue-v0.1.1
+git push origin cue-v0.2.0
 ```
 
 Use `plugin add --description "..." SOURCE` only for a namespace's first import. For every later

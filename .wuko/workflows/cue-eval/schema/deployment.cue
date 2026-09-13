@@ -1,6 +1,7 @@
-package cueeval
+package schema
 
 #Policy: {
+	request_id: int
 	deployment: {
 		name: =~"^api-(dev|staging|production)$"
 		replicas: int & >=1 & <=10
@@ -11,10 +12,4 @@ package cueeval
 		service: string & !=""
 	}]
 	approved?: bool
-}
-
-candidate: #Policy & wuko.steps.plan.value
-
-output: candidate & {
-	approved: true
 }

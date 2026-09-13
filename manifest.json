@@ -47,14 +47,14 @@
     },
     {
       "name": "cue-eval",
-      "package_version": "1.0.0",
+      "package_version": "1.1.0",
       "source": ".wuko/workflows/cue-eval",
       "path": "packages/cue-eval.tar.gz",
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Validate, default, normalize, and generate typed configuration with the cue.eval plugin",
-      "source_sha256": "ebaa6e56fa92a653ca7eed36aabffb2b0b27c2aaf11ec2660e87fb3c07646703",
-      "sha256": "1cfdecc45569dc58b8c4d59f285db13db8a0b707f0e57aba18a8f35515291da9"
+      "source_sha256": "cda895aa1ed508f32551e2a6a4264feff68d0c7b94d6e2d6997cff5429732894",
+      "sha256": "7959d46929fb2aa1a05c18109c4af06727892ef82dd09cd89f745b48438f5fd0"
     },
     {
       "name": "durable-state",
@@ -258,12 +258,12 @@
   "plugins": [
     {
       "namespace": "cue",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.2.0",
       "description": "Evaluate and validate typed CUE values in Wuko workflows",
       "source": ".wuko/plugin-sources/cue",
-      "source_sha256": "aa3d00fd1351ef75c1501eaaa6ddbeea3ce61f596e98caa8c8f87a25259b0d1a",
+      "source_sha256": "b259aa4fbf9b39ec282bed22bc07c0d92edf72a1eb12a73ea47403a1ce5e3f6b",
       "path": "plugins/cue/plugin.json",
-      "sha256": "4adca0e1de4aac0ed63ccaa03ec655e367b9b5fafd752f6c90e575039a56bd2b",
+      "sha256": "57f9bc6ae7e3c39e58014e320e289b386aaca34f7e1887084f4456fdd59688ae",
       "platforms": [
         {
           "os": "darwin",

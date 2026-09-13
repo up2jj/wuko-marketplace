@@ -8,7 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
+	"sync/atomic"
+
+	"golang.org/x/mod/semver"
 )
 
 const (
@@ -16,6 +20,7 @@ const (
 	namespace       = "cue"
 	stepType        = "cue.eval"
 	maxFrameSize    = 10 << 20
+	minHostVersion  = "v0.14.0"
 )
 
 type request struct {
@@ -75,6 +80,8 @@ type server struct {
 	jobsMu  sync.Mutex
 	jobs    map[string]context.CancelFunc
 	jobsWG  sync.WaitGroup
+
+	runtimeAllowed atomic.Bool
 }
 
 func serve(input io.Reader, output io.Writer, worker workerFunc) error {
@@ -161,11 +168,19 @@ func (s *server) dispatch(ctx context.Context, request request) (any, error) {
 		if params.Protocol != protocolVersion {
 			return nil, fmt.Errorf("unsupported protocol %q", params.Protocol)
 		}
+		allowed, err := validateHostVersion(params.HostVersion)
+		if err != nil {
+			return nil, err
+		}
+		s.runtimeAllowed.Store(allowed)
 		return map[string]any{
 			"protocol": protocolVersion, "namespace": namespace,
 			"steps": []any{map[string]any{"type": stepType}}, "executors": []any{}, "helpers": []any{},
 		}, nil
 	case "step.validate":
+		if !s.runtimeAllowed.Load() {
+			return nil, minimumHostVersionError()
+		}
 		params, configuration, err := decodeStep(request.Params)
 		if err != nil {
 			return nil, err
@@ -173,25 +188,20 @@ func (s *server) dispatch(ctx context.Context, request request) (any, error) {
 		if configuration.validationMustBeDeferred() {
 			return map[string]any{}, nil
 		}
-		source, filename, err := loadSource(configuration, params.Context.WorkflowDir)
-		if err != nil {
-			return nil, err
-		}
-		_, err = s.worker(ctx, workerJob{Mode: workerModeValidate, Source: source, Filename: filename, Context: params.Context})
+		_, err = s.worker(ctx, workerJob{Mode: workerModeValidate, Configuration: configuration, Context: params.Context})
 		if err != nil {
 			return nil, redactError(err, params.Context.Env)
 		}
 		return map[string]any{}, nil
 	case "step.run":
+		if !s.runtimeAllowed.Load() {
+			return nil, minimumHostVersionError()
+		}
 		params, configuration, err := decodeStep(request.Params)
 		if err != nil {
 			return nil, err
 		}
-		source, filename, err := loadSource(configuration, params.Context.WorkflowDir)
-		if err != nil {
-			return nil, err
-		}
-		value, err := s.worker(ctx, workerJob{Mode: workerModeRun, Source: source, Filename: filename, Context: params.Context})
+		value, err := s.worker(ctx, workerJob{Mode: workerModeRun, Configuration: configuration, Context: params.Context})
 		if err != nil {
 			return nil, redactError(err, params.Context.Env)
 		}
@@ -199,6 +209,44 @@ func (s *server) dispatch(ctx context.Context, request request) (any, error) {
 	default:
 		return nil, fmt.Errorf("unknown method %q", request.Method)
 	}
+}
+
+func validateHostVersion(version string) (bool, error) {
+	if version == "" {
+		return false, nil
+	}
+	if version == "dev" {
+		return true, nil
+	}
+	release, ok := releaseVersion(version)
+	if !ok {
+		// An unrecognized version must not fail the handshake. Runtime operations still
+		// report the documented minimum-version error.
+		return false, nil
+	}
+	if semver.Compare(release, minHostVersion) < 0 {
+		return false, minimumHostVersionError()
+	}
+	return true, nil
+}
+
+// releaseVersion reduces a Wuko version to the release it derives from. Release builds report
+// "vX.Y.Z", while development builds report "git describe" output such as "vX.Y.Z-12-gabc1234",
+// which is newer than the vX.Y.Z tag it was described from. Semver orders any prerelease before
+// its release, so the suffix is dropped before comparing.
+func releaseVersion(version string) (string, bool) {
+	if !strings.HasPrefix(version, "v") {
+		version = "v" + version
+	}
+	if !semver.IsValid(version) {
+		return "", false
+	}
+	canonical := semver.Canonical(version)
+	return strings.TrimSuffix(canonical, semver.Prerelease(canonical)), true
+}
+
+func minimumHostVersionError() error {
+	return fmt.Errorf("cue plugin v0.2 requires Wuko %s or newer", minHostVersion)
 }
 
 func decodeStep(raw json.RawMessage) (stepParams, config, error) {
@@ -256,6 +304,7 @@ func decodeRawStrict(data json.RawMessage, target any) error {
 
 func decodeReaderStrict(data []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.UseNumber()
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(target); err != nil {
 		return err

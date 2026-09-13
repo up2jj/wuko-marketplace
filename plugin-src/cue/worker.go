@@ -18,10 +18,9 @@ const (
 )
 
 type workerJob struct {
-	Mode     string      `json:"mode"`
-	Source   string      `json:"source"`
-	Filename string      `json:"filename"`
-	Context  stepContext `json:"context"`
+	Mode          string      `json:"mode"`
+	Configuration config      `json:"configuration"`
+	Context       stepContext `json:"context"`
 }
 
 type workerResponse struct {
