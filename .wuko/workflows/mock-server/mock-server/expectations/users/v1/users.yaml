@@ -1,0 +1,56 @@
+version: 1
+
+templates:
+  headers:
+    json_response:
+      Content-Type: application/json
+      X-Mock-User: '{{ .request.params.user_id }}'
+  bodies:
+    stored_user:
+      json: {expr: 'state.users[request.params.user_id]'}
+
+expectations:
+  - name: store_user
+    times: 2
+    when: 'request.method == "PUT" && route("/users/{user_id}")'
+    assertions:
+      - name: authorized
+        expr: 'header("Authorization") == "Bearer " + vars.mock_token'
+        message: Expected the configured mock bearer token
+      - name: valid_name
+        expr: 'jsonBody().name != ""'
+        message: User name must not be empty
+      - name: supported_role
+        expr: 'request.json.role in ["admin", "member"]'
+        message: 'Unsupported role {{ .request.json.role }}'
+    update:
+      - op: set
+        path: '/users/{{ jsonPointerEscape .request.params.user_id }}'
+        value: {expr: request.json}
+    respond:
+      status: 201
+      headers_template: json_response
+      body_template: stored_user
+
+  - name: get_user
+    times: 1
+    when: 'request.method == "GET" && route("/users/{user_id}")'
+    assertions:
+      - name: exists
+        expr: 'hasKey(state.users, request.params.user_id)'
+        message: 'Unknown user {{ .request.params.user_id }}'
+    respond:
+      headers_template: json_response
+      body_template: stored_user
+
+  - name: delete_user
+    times: 1
+    when: 'request.method == "DELETE" && route("/users/{user_id}")'
+    assertions:
+      - name: exists
+        expr: 'hasKey(state.users, request.params.user_id)'
+        message: 'Unknown user {{ .request.params.user_id }}'
+    update:
+      - op: remove
+        path: '/users/{{ jsonPointerEscape .request.params.user_id }}'
+    respond: {status: 204}

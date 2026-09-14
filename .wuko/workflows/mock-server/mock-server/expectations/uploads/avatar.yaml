@@ -1,0 +1,19 @@
+version: 1
+
+expectations:
+  - name: upload_avatar
+    times: 1
+    when: 'request.method == "POST" && route("/users/{user_id}/avatar")'
+    assertions:
+      - {name: category, expr: 'form("category") == "profile"'}
+      - {name: one_avatar, expr: 'len(request.files.avatar) == 1'}
+      - {name: png_file, expr: 'request.files.avatar[0].content_type == "image/png"'}
+      - name: file_size
+        expr: 'request.files.avatar[0].size <= vars.max_avatar_bytes'
+        message: Avatar exceeds the configured size limit
+    respond:
+      status: 201
+      json:
+        user_id: {expr: request.params.user_id}
+        filename: {expr: 'request.files.avatar[0].filename'}
+        size: {expr: 'request.files.avatar[0].size'}

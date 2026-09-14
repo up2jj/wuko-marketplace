@@ -1,0 +1,24 @@
+version: 1
+package_version: 1.0.0
+name: forward-proxy
+description: Intercept one HTTPS request and emit its traffic record as JSONL
+
+steps:
+  - id: proxy
+    type: http.forward_proxy
+    with:
+      rules:
+        - name: identify_wuko
+          when: 'original.host == "example.com"'
+          rewrite:
+            headers:
+              set: {X-Intercepted-By: [wuko]}
+      log:
+        destination: stdout
+
+  - id: request
+    type: http
+    with:
+      url: https://example.com/
+      proxy: {url: "{{ .steps.proxy.url }}"}
+      root_ca_file: "{{ .steps.proxy.ca_cert }}"

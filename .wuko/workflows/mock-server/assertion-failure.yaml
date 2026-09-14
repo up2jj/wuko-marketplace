@@ -1,0 +1,18 @@
+version: 1
+name: mock-server-assertion-failure
+description: Demonstrate a fixed 422 response and failing final mock verification
+
+steps:
+  - id: mock
+    type: http.mock_server
+    with:
+      expectations: [mock-server/expectations/failure.yml]
+
+  - id: rejected
+    type: http
+    with:
+      method: POST
+      url: '{{ .steps.mock.url }}/validated'
+      json: {value: bad}
+      response: json
+      success_statuses: [422]

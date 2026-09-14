@@ -1,0 +1,11 @@
+version: 1
+
+expectations:
+  - name: validated_request
+    times: 1
+    when: 'request.method == "POST" && request.path == "/validated"'
+    assertions:
+      - name: accepted_value
+        expr: 'jsonBody().value == "good"'
+        message: 'Expected good, received {{ .request.json.value }}'
+    respond: normal response is not used after an assertion failure

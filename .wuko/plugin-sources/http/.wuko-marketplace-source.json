@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "local",
+  "description": "Intercept HTTP traffic and run stateful verified mock servers"
+}

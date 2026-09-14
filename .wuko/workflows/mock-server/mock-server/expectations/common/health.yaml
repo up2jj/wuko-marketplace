@@ -1,0 +1,7 @@
+version: 1
+
+expectations:
+  - name: health
+    times: 1
+    when: 'request.method == "GET" && request.path == "/health"'
+    respond: healthy

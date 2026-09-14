@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "namespace": "http",
+  "plugin_version": "0.1.0",
+  "protocol": "wuko.plugin/v2",
+  "artifacts": [
+    {
+      "os": "darwin",
+      "arch": "amd64",
+      "path": "dist/wuko-plugin-http_Darwin_amd64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-http",
+      "sha256": "7c0021b66b544df3c49de76430ca200bf6d7f72691626e1167e7358cb2b49e67"
+    },
+    {
+      "os": "darwin",
+      "arch": "arm64",
+      "path": "dist/wuko-plugin-http_Darwin_arm64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-http",
+      "sha256": "85c18f3e80508777950c1af7a53b1caea89ad84152741a2bf12ea0b5f1765709"
+    },
+    {
+      "os": "linux",
+      "arch": "amd64",
+      "path": "dist/wuko-plugin-http_Linux_amd64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-http",
+      "sha256": "8e5d06881e372b783726f4b27a9201476ed364279e6ac377f76e3156e0427b25"
+    },
+    {
+      "os": "linux",
+      "arch": "arm64",
+      "path": "dist/wuko-plugin-http_Linux_arm64.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko-plugin-http",
+      "sha256": "4b08058454854d4d8486d7c49f1feab25429e5c1f51f020564358bb3ef65e76f"
+    }
+  ]
+}

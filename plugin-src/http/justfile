@@ -1,0 +1,16 @@
+build:
+	go build -o wuko-plugin-http .
+
+test:
+	go test ./...
+
+vet:
+	go vet ./...
+
+fmt:
+	gofmt -w *.go forwardproxy/*.go localtls/*.go mockserver/*.go tools/release/*.go
+
+check: fmt vet test
+
+release version:
+	go run ./tools/release -version "{{version}}"

@@ -1,14 +1,13 @@
 # Wuko workflow marketplace
 
 A version-1 archive marketplace of runnable [Wuko](https://github.com/up2jj/wuko) workflows and
-executable plugins. Each package demonstrates one capability of the engine, and every example
-is self-contained: POSIX shell builtins and Wuko's own steps only, with no network calls,
-containers, or coding agents. `vault-secrets` is the one exception, and a guarded one: it reaches
-for the Bitwarden CLI when the machine has one and skips the lookup when it does not.
+executable plugins. Each package demonstrates one capability of the engine. Most examples are
+self-contained and use POSIX shell builtins or Wuko's own steps; packages that require a plugin or
+external service say so explicitly.
 
 ## Install
 
-The current catalog is tested against [Wuko v0.13.0](https://github.com/up2jj/wuko/releases/tag/v0.13.0).
+The current catalog is tested against Wuko v0.14.0.
 The `Since` column below records the first Wuko release that supports each example.
 
 ```sh
@@ -37,6 +36,8 @@ Remove one with `wuko uninstall NAME`.
 | [`choice-and-table`](.wuko/workflows/choice-and-table/wuko.yaml) | `tui_table`, computed `tui_choice` `*_expr` properties, and `auto_select_single` | v0.9.0 / v0.11.0 |
 | [`cue-eval`](.wuko/workflows/cue-eval/wuko.yaml) | CUE constraints, defaults, comprehensions, policy validation, and typed step outputs | v0.13.0 + plugin |
 | [`local-notifier-demo`](.wuko/workflows/local-notifier-demo/wuko.yaml) | Portable terminal and desktop notifications with automatic fallback | v0.13.0 + plugin |
+| [`forward-proxy`](.wuko/workflows/forward-proxy/wuko.yaml) | HTTPS interception, declarative rewriting, generated trust, and traffic logging (makes one live request to `example.com`) | v0.14.0 + plugin + network |
+| [`mock-server`](.wuko/workflows/mock-server/wuko.yaml) | Stateful HTTP(S) expectations, request assertions, fixtures, and scope-end verification | v0.14.0 + plugin |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
 | [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
 | [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | v0.12.0 |
@@ -160,6 +161,7 @@ executors, and helpers.
 | --- | --- | --- |
 | `cue` | The `cue.eval` step for typed CUE evaluation and policy validation | darwin and linux on amd64 and arm64 |
 | `local-notifier` | The `local-notifier.notify` step for terminal or desktop notifications | darwin and linux on amd64 and arm64 |
+| `http` | The `http.forward_proxy` and `http.mock_server` managed testing services | darwin and linux on amd64 and arm64 |
 | `hello` | The `hello.uppercase` step, the `hello.local` executor, and the `hello_slug` helper | darwin and linux on amd64 and arm64 |
 
 ```sh
@@ -176,6 +178,10 @@ wuko install --package cue-eval https://github.com/up2jj/wuko-marketplace
 # Install local notifications plus its runnable example
 wuko plugin install --global --package local-notifier https://github.com/up2jj/wuko-marketplace
 wuko install --package local-notifier-demo https://github.com/up2jj/wuko-marketplace
+
+# Install HTTP testing services plus their runnable examples
+wuko plugin install --global --package http https://github.com/up2jj/wuko-marketplace
+wuko install --package forward-proxy --package mock-server https://github.com/up2jj/wuko-marketplace
 
 wuko plugin uninstall --global hello
 ```
@@ -227,6 +233,14 @@ steps:
       message: Build completed
       delivery: auto
 ```
+
+`http.forward_proxy` is a lifecycle-managed loopback proxy for opted-in HTTP(S) traffic. It can
+rewrite requests declaratively or with isolated Lua, produces a per-run CA for HTTPS interception,
+streams responses, and writes redacted JSONL traffic logs. `http.mock_server` serves strict,
+file-backed expectations with request-local Expr helpers, frozen workflow template roots, atomic
+state updates, optional generated TLS, and exact interaction verification at scope shutdown. See
+the [HTTP plugin reference](plugin-src/http/README.md) for their complete configuration and output
+contracts.
 
 `cue.eval` requires Wuko 0.14.0 or newer. It accepts exactly one of inline `source`, a
 workflow-relative `file`, or a workflow-relative `package` directory and publishes the concrete

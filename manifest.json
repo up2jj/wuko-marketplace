@@ -79,6 +79,17 @@
       "sha256": "95465f993369a77142d60e66df5290c29d4714d7d174e6901d0ffc9cc8faec36"
     },
     {
+      "name": "forward-proxy",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/forward-proxy",
+      "path": "packages/forward-proxy.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Intercept one HTTPS request and emit its traffic record as JSONL",
+      "source_sha256": "580520b06ff6c36a3d3be9665db2e892b2278c03ebde92354716bc0622f2760e",
+      "sha256": "4c9b056d718f7aa28124e0d9b9f19d8c0e5220c58cfa7c73491bd8ba0cb8e70e"
+    },
+    {
       "name": "git-history",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/git-history",
@@ -132,6 +143,17 @@
       "description": "Run readiness-gated background services and call them as JSONL RPC workers",
       "source_sha256": "a62b831dc8a7f1f8823243ee1945f62dcc63d583b042037bfa9e8213af2b1556",
       "sha256": "264acaef86ec42ecf5ee6bfcbf36ee522de249c57aa0ca9b3d20204eaa375a5f"
+    },
+    {
+      "name": "mock-server",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/mock-server",
+      "path": "packages/mock-server.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Exercise stateful JSON, multipart, literal, multi-directory, and HTTPS mocks",
+      "source_sha256": "7752386908580c05fb3f26c2ff37d7b924ead877e56344da0dc64a50d876f44d",
+      "sha256": "d5f435b958e9b6cd711ed5e76eb8ab9c85bf317201d8d8695a6ae15263d06fa1"
     },
     {
       "name": "multiplexer-status",
@@ -291,6 +313,33 @@
       "source_sha256": "497b404d0c173a1abc2d5115cdf8092231624e7a76f4356a4f7f39996c09bf2d",
       "path": "plugins/hello/plugin.json",
       "sha256": "18fb646ea1fa6cf9711552764fe008949d40b4a1f1371576d81415131b3aba0c",
+      "platforms": [
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64"
+        },
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        }
+      ]
+    },
+    {
+      "namespace": "http",
+      "plugin_version": "0.1.0",
+      "description": "Intercept HTTP traffic and run stateful verified mock servers",
+      "source": ".wuko/plugin-sources/http",
+      "source_sha256": "abb33cd983cfe6875eaae8d3a1fc74d44db154092de9327955f9705126d1d72d",
+      "path": "plugins/http/plugin.json",
+      "sha256": "0befbfbc49b29141ab4c5ad2859fe4f1777f71ede01086f8dd75c717b19f489b",
       "platforms": [
         {
           "os": "darwin",

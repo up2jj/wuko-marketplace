@@ -1,0 +1,9 @@
+version: 1
+
+expectations:
+  - name: literal_response
+    times: 1
+    when: 'request.method == "GET" && request.path == "/literal"'
+    respond:
+      headers: {Content-Type: text/plain}
+      literal_body: '{{ this is returned exactly }}'

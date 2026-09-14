@@ -1,0 +1,84 @@
+version: 1
+package_version: 1.0.0
+name: mock-server
+description: Exercise stateful JSON, multipart, literal, multi-directory, and HTTPS mocks
+
+vars:
+  mock_token: development-token
+  max_avatar_bytes: 1024
+
+steps:
+  - id: mock
+    type: http.mock_server
+    with:
+      tls: true
+      expectations:
+        - mock-server/expectations/common
+        - mock-server/expectations/users/**/*.yaml
+        - mock-server/expectations/uploads
+        - mock-server/expectations/special.yml
+      initial_state:
+        users: {}
+      log:
+        destination: stdout
+
+  - id: health
+    type: http
+    with:
+      url: '{{ .steps.mock.url }}/health'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+
+  - id: create_user
+    type: http
+    with:
+      method: PUT
+      url: '{{ .steps.mock.url }}/users/alice'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+      headers: {Authorization: 'Bearer {{ .vars.mock_token }}'}
+      json: {name: Alice, role: admin}
+      response: json
+      success_statuses: [201]
+
+  - id: get_user
+    type: http
+    with:
+      url: '{{ .steps.mock.url }}/users/alice'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+      response: json
+
+  - id: update_user
+    type: http
+    with:
+      method: PUT
+      url: '{{ .steps.mock.url }}/users/alice'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+      headers: {Authorization: 'Bearer {{ .vars.mock_token }}'}
+      json: {name: Alice Updated, role: member}
+      response: json
+      success_statuses: [201]
+
+  - id: upload_avatar
+    type: http
+    with:
+      method: POST
+      url: '{{ .steps.mock.url }}/users/alice/avatar'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+      form: {category: profile}
+      files:
+        - {field: avatar, path: mock-server/avatar.png}
+      response: json
+      success_statuses: [201]
+
+  - id: literal
+    type: http
+    with:
+      url: '{{ .steps.mock.url }}/literal'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+
+  - id: delete_user
+    type: http
+    with:
+      method: DELETE
+      url: '{{ .steps.mock.url }}/users/alice'
+      root_ca_file: '{{ .steps.mock.ca_cert }}'
+      success_statuses: [204]
