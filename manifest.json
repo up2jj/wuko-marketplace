@@ -112,6 +112,17 @@
       "sha256": "9c123b3b2bf55d44ffbe4562ceb7be97a49c5ce5cac547f306d48a00bdff9981"
     },
     {
+      "name": "jwt-toolkit",
+      "package_version": "1.0.0",
+      "source": ".wuko/workflows/jwt-toolkit",
+      "path": "packages/jwt-toolkit.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Generate and verify RS256 JWTs with rich outputs, shared keys, public JWKS, and validity predicates",
+      "source_sha256": "71c593be17916eddb62086d45f92ebc5ecc7c73607246aa285b17de3668496b9",
+      "sha256": "6ca700943b41c7176cab141a6c2c46472c03ed9860e26455197084c511440cd7"
+    },
+    {
       "name": "local-notifier-demo",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/local-notifier-demo",
@@ -340,6 +351,33 @@
       "source_sha256": "abb33cd983cfe6875eaae8d3a1fc74d44db154092de9327955f9705126d1d72d",
       "path": "plugins/http/plugin.json",
       "sha256": "0befbfbc49b29141ab4c5ad2859fe4f1777f71ede01086f8dd75c717b19f489b",
+      "platforms": [
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64"
+        },
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        }
+      ]
+    },
+    {
+      "namespace": "jwt",
+      "plugin_version": "0.1.0",
+      "description": "Generate and verify RS256 JWTs with helpers, steps, and JWKS support",
+      "source": ".wuko/plugin-sources/jwt",
+      "source_sha256": "5b9432f19d144deaa38f14048a08642c1cb0d4efe361a4fae7767a2048e1c4d0",
+      "path": "plugins/jwt/plugin.json",
+      "sha256": "b8eac8720cd35d32e7804d3747ffc4e8f92b3c88f1b2d3036cb3498cedae9944",
       "platforms": [
         {
           "os": "darwin",

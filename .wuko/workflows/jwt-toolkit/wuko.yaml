@@ -1,0 +1,83 @@
+version: 1
+package_version: 1.0.0
+name: jwt-toolkit
+description: Generate and verify RS256 JWTs with rich outputs, shared keys, public JWKS, and validity predicates
+
+# Install the plugin before running this workflow:
+#
+#   wuko plugin install --global --package jwt https://github.com/up2jj/wuko-marketplace
+#   wuko run --file .wuko/workflows/jwt-toolkit/wuko.yaml
+#
+# Installed plugins provide steps without a workflow declaration. Helpers need
+# an explicit pinned `plugins.jwt` declaration; see plugin-src/jwt/README.md.
+
+steps:
+  - id: issue
+    type: jwt.generate
+    with:
+      issuer: https://issuer.example
+      audience: [orders-api, audit-api]
+      subject: user-42
+      ttl: 10m
+      claims:
+        role: admin
+        permissions: [orders:read, orders:write]
+
+  # Rich outputs expose exactly what was signed plus a public-only JWKS.
+  - id: inspect_outputs
+    type: assert
+    with:
+      expr: 'steps.issue.header.alg == "RS256" && steps.issue.claims.role == "admin" && len(steps.issue.jwks.keys) == 1'
+      message: jwt.generate should expose the effective header, claims, and public JWKS
+
+  # Supplying the generated JWKS demonstrates portable verification.
+  - id: verify_inline_jwks
+    type: jwt.verify
+    with:
+      token: "{{ .steps.issue.token }}"
+      jwks: '{{ .steps.issue.jwks | toJSONCompact }}'
+      issuer: https://issuer.example
+      audience: orders-api
+      subject: user-42
+      required_claims: [exp, iat, jti, sub]
+
+  # Omitting jwks/jwks_url uses the same command-scoped key as jwt.generate.
+  - id: verify_shared_key
+    type: jwt.verify
+    with:
+      token: "{{ .steps.issue.token }}"
+      issuer: https://issuer.example
+      audience: audit-api
+
+  - id: valid_predicate
+    type: jwt.is_valid
+    with:
+      token: "{{ .steps.issue.token }}"
+      issuer: https://issuer.example
+      audience: orders-api
+
+  - id: invalid_predicate
+    type: jwt.is_valid
+    with:
+      token: not-a-token
+
+  - id: command_jwks
+    type: jwt.jwks
+
+  - id: assertions
+    type: assert
+    with:
+      expr: 'steps.verify_inline_jwks.claims.permissions[1] == "orders:write" && steps.verify_shared_key.claims.sub == "user-42" && steps.valid_predicate.valid && !steps.invalid_predicate.valid && steps.command_jwks.jwks.keys[0].kid == steps.issue.header.kid'
+      message: JWT steps should share keys and distinguish invalid tokens from operational failures
+
+  - id: report
+    type: shell
+    with:
+      command: printf
+      args:
+        - "issued %s for %s; valid=%s malformed=%s\npublic JWKS: %s\n"
+        - "{{ .steps.issue.header.alg }}"
+        - "{{ .steps.issue.claims.sub }}"
+        - "{{ .steps.valid_predicate.valid }}"
+        - "{{ .steps.invalid_predicate.valid }}"
+        - '{{ .steps.issue.jwks | toJSONCompact }}'

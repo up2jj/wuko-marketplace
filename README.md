@@ -38,6 +38,7 @@ Remove one with `wuko uninstall NAME`.
 | [`local-notifier-demo`](.wuko/workflows/local-notifier-demo/wuko.yaml) | Portable terminal and desktop notifications with automatic fallback | v0.13.0 + plugin |
 | [`forward-proxy`](.wuko/workflows/forward-proxy/wuko.yaml) | HTTPS interception, declarative rewriting, generated trust, and traffic logging (makes one live request to `example.com`) | v0.14.0 + plugin + network |
 | [`mock-server`](.wuko/workflows/mock-server/wuko.yaml) | Stateful HTTP(S) expectations, request assertions, fixtures, and scope-end verification | v0.14.0 + plugin |
+| [`jwt-toolkit`](.wuko/workflows/jwt-toolkit/wuko.yaml) | RS256 generation and verification, rich claims/header outputs, public JWKS, shared command keys, and validity predicates | v0.14.0 + plugin |
 | [`lua-typed-args`](.wuko/workflows/lua-typed-args/wuko.yaml) | `lua` argument expressions and the `wuko.*` runtime snapshot roots | v0.11.0 |
 | [`multiplexer-status`](.wuko/workflows/multiplexer-status/wuko.yaml) | The `multiplexer` step for tmux, cmux, and Herdr, including tab scope and title restore | v0.11.0 |
 | [`concurrent-dag`](.wuko/workflows/concurrent-dag/wuko.yaml) | Sibling `needs` edges inside `concurrent`, ancestor state, and descendant skipping | v0.12.0 |
@@ -162,6 +163,7 @@ executors, and helpers.
 | `cue` | The `cue.eval` step for typed CUE evaluation and policy validation | darwin and linux on amd64 and arm64 |
 | `local-notifier` | The `local-notifier.notify` step for terminal or desktop notifications | darwin and linux on amd64 and arm64 |
 | `http` | The `http.forward_proxy` and `http.mock_server` managed testing services | darwin and linux on amd64 and arm64 |
+| `jwt` | RS256 JWT generation and verification through four steps and four workflow-scoped helpers, with inline or remote JWKS | darwin and linux on amd64 and arm64 |
 | `hello` | The `hello.uppercase` step, the `hello.local` executor, and the `hello_slug` helper | darwin and linux on amd64 and arm64 |
 
 ```sh
@@ -182,6 +184,10 @@ wuko install --package local-notifier-demo https://github.com/up2jj/wuko-marketp
 # Install HTTP testing services plus their runnable examples
 wuko plugin install --global --package http https://github.com/up2jj/wuko-marketplace
 wuko install --package forward-proxy --package mock-server https://github.com/up2jj/wuko-marketplace
+
+# Install the JWT toolkit plus its runnable step example
+wuko plugin install --global --package jwt https://github.com/up2jj/wuko-marketplace
+wuko install --package jwt-toolkit https://github.com/up2jj/wuko-marketplace
 
 wuko plugin uninstall --global hello
 ```
@@ -241,6 +247,14 @@ file-backed expectations with request-local Expr helpers, frozen workflow templa
 state updates, optional generated TLS, and exact interaction verification at scope shutdown. See
 the [HTTP plugin reference](plugin-src/http/README.md) for their complete configuration and output
 contracts.
+
+`jwt.generate`, `jwt.jwks`, `jwt.verify`, and `jwt.is_valid` provide a standard-library-only RS256
+toolkit. Generation returns the compact token plus its effective header, claims, and public JWKS;
+verification accepts the command key, inline JWK/JWKS, or a bounded remote JWKS URL. The matching
+`jwt_generate`, `jwt_jwks`, `jwt_verify`, and `jwt_is_valid` helpers are available to Expr,
+templates, and Lua when the workflow explicitly pins the plugin. Invalid tokens fail strict verify
+but become `false` in `is_valid`; configuration, JWKS, and network failures remain errors. See the
+[JWT plugin reference](plugin-src/jwt/README.md) for the full input contract and helper examples.
 
 `cue.eval` requires Wuko 0.14.0 or newer. It accepts exactly one of inline `source`, a
 workflow-relative `file`, or a workflow-relative `package` directory and publishes the concrete
@@ -352,6 +366,7 @@ plugins/<ns>/dist/*.tar.gz           # generated public platform archives
 .wuko/workflows/<name>/wuko.yaml     # workflow package sources
 .wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
 plugin-src/cue/                       # maintained source for the CUE plugin
+plugin-src/jwt/                       # maintained source for the JWT plugin
 plugin-src/local-notifier/            # maintained source for the local-notifier plugin
 ```
 
