@@ -1,8 +1,8 @@
 # Wuko JWT plugin
 
 `jwt` adds dependency-free RS256 token generation, public JWKS projection, and strict JWT
-verification to Wuko. It uses only Go's standard library and exposes the same operations as
-workflow steps and helpers.
+verification to Wuko. It uses the Wuko Go SDK and plugin protocol v3, requires Wuko 0.16.0 or
+newer, and exposes the same operations as workflow steps and helpers.
 
 ## Install
 
@@ -16,8 +16,8 @@ build the helper registry before evaluation:
 ```yaml
 plugins:
   jwt:
-    source: github:up2jj/wuko-marketplace@jwt-v0.1.0:plugins/jwt/plugin.json
-    sha256: b8eac8720cd35d32e7804d3747ffc4e8f92b3c88f1b2d3036cb3498cedae9944
+    source: github:up2jj/wuko-marketplace@jwt-v0.2.0:plugins/jwt/plugin.json
+    sha256: e633ff3fc70ff7d1bca93acf05e885d97ae944866cbb7c164e0f135405e0a083
 ```
 
 ## Steps
@@ -115,7 +115,7 @@ present `exp`, `nbf`, and `iat`. Set `required_claims: []` explicitly to allow a
 
 ```sh
 just check
-just release 0.1.0
+just release 0.2.0
 ```
 
 The release command cross-compiles deterministic Darwin/Linux archives for amd64 and arm64 with

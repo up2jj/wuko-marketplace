@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -8,7 +9,11 @@ import (
 
 func main() {
 	notifier := newNotifier(runtime.GOOS, osCommandRunner{})
-	if err := serve(os.Stdin, os.Stdout, notifier.notify); err != nil {
+	plugin, err := newPlugin(notifier.notify)
+	if err == nil {
+		err = plugin.Serve(context.Background(), os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

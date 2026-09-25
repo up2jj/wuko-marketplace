@@ -34,7 +34,16 @@ type verifyStepConfig struct {
 	RequiredClaims *[]string       `json:"required_claims"`
 }
 
-func (s *server) callHelper(ctx context.Context, params helperParams) (any, error) {
+type helperParams struct {
+	Name string
+	Args []json.RawMessage
+}
+
+type pluginAdapter struct {
+	service *service
+}
+
+func (s *pluginAdapter) callHelper(ctx context.Context, params helperParams) (any, error) {
 	switch params.Name {
 	case "generate":
 		if len(params.Args) > 2 {
@@ -92,7 +101,7 @@ func (s *server) callHelper(ctx context.Context, params helperParams) (any, erro
 	}
 }
 
-func (s *server) callStep(ctx context.Context, stepType string, raw json.RawMessage, validateOnly bool) (map[string]any, error) {
+func (s *pluginAdapter) callStep(ctx context.Context, stepType string, raw json.RawMessage, validateOnly bool) (map[string]any, error) {
 	switch stepType {
 	case "jwt.generate":
 		var config generateStepConfig

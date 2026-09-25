@@ -1,8 +1,8 @@
 {
   "version": 1,
   "namespace": "jwt",
-  "plugin_version": "0.1.0",
-  "protocol": "wuko.plugin/v1",
+  "plugin_version": "0.2.0",
+  "protocol": "wuko.plugin/v3",
   "artifacts": [
     {
       "os": "darwin",
@@ -10,7 +10,7 @@
       "path": "dist/wuko-plugin-jwt_Darwin_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-jwt",
-      "sha256": "f46357567085f80751d145ac64075a7c661eab84aa24b4a8b984a542b2fb3c9e"
+      "sha256": "b21c079f68bde15d90cfa3f88c16ff53f21a675d887b5fe747aecaac22cb873c"
     },
     {
       "os": "darwin",
@@ -18,7 +18,7 @@
       "path": "dist/wuko-plugin-jwt_Darwin_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-jwt",
-      "sha256": "8b8d1ee19e3e17f11596a46b8959b66bf1624972f7fe0d95b08f9114358814b5"
+      "sha256": "9a73c57a65548966ea54667e967d0492986e6f5e7b1ad6f0e4b3fe55408d832c"
     },
     {
       "os": "linux",
@@ -26,7 +26,7 @@
       "path": "dist/wuko-plugin-jwt_Linux_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-jwt",
-      "sha256": "8a1413aa4d3b67612446af0d5af06382407bb089898f1807c8331584fa7c059d"
+      "sha256": "ca520d987193a11df9f9aad4901fb2317eba3f3e178a4204598b26bd372cd1ac"
     },
     {
       "os": "linux",
@@ -34,7 +34,7 @@
       "path": "dist/wuko-plugin-jwt_Linux_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-jwt",
-      "sha256": "322a86393d20e9917c1fcd2b19000cfdb1b1b03694ea89447b7d6927235c1678"
+      "sha256": "5f26b9aab50d52fe8b9e4d20727fe7e342d008de373ac31b67cc06f732bff438"
     }
   ]
 }

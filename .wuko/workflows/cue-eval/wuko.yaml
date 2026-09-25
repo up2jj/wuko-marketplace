@@ -1,5 +1,5 @@
 version: 1
-package_version: 1.1.0
+package_version: 1.1.1
 name: cue-eval
 description: Validate, default, normalize, and generate typed configuration with the cue.eval plugin
 
@@ -12,7 +12,7 @@ vars:
   environment: staging
   replicas: 3
   regions: [eu-central-1, us-east-1]
-  request_id: 9007199254740993
+  request_id: 9007199254740991
 
 steps:
   - id: plan

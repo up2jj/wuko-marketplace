@@ -1,132 +1,152 @@
 package main
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
 	"strings"
 	"testing"
-	"time"
+
+	"github.com/up2jj/wuko/plugin/sdk"
 )
 
-func TestInitialize(t *testing.T) {
-	s := &server{}
-	result, err := s.dispatch(t.Context(), request{Method: "initialize", Params: json.RawMessage(`{"protocol":"wuko.plugin/v1"}`)})
+type testFrame struct {
+	ID     string          `json:"id"`
+	Event  string          `json:"event"`
+	Data   string          `json:"data"`
+	Result json.RawMessage `json:"result"`
+	Error  *testWireError  `json:"error"`
+}
+
+type testWireError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
+type pluginHarness struct {
+	input   *io.PipeWriter
+	frames  *bufio.Scanner
+	done    chan error
+	encoder *json.Encoder
+}
+
+func newPluginHarness(t *testing.T, notify notifyFunc) *pluginHarness {
+	t.Helper()
+	plugin, err := newPlugin(notify)
 	if err != nil {
-		t.Fatalf("dispatch() error = %v", err)
+		t.Fatal(err)
 	}
-	declaration := result.(map[string]any)
-	if declaration["namespace"] != namespace || declaration["protocol"] != protocolVersion {
-		t.Fatalf("initialize result = %#v", declaration)
+	pluginInput, hostInput := io.Pipe()
+	hostOutput, pluginOutput := io.Pipe()
+	done := make(chan error, 1)
+	go func() {
+		done <- plugin.Serve(context.Background(), pluginInput, pluginOutput)
+		_ = pluginOutput.Close()
+	}()
+	harness := &pluginHarness{input: hostInput, frames: bufio.NewScanner(hostOutput), done: done, encoder: json.NewEncoder(hostInput)}
+	harness.call(t, "init", "initialize", map[string]any{"protocol": sdk.Protocol})
+	frame := harness.next(t)
+	if frame.ID != "init" || frame.Error != nil {
+		t.Fatalf("initialize frame = %+v", frame)
 	}
-	steps := declaration["steps"].([]any)
-	if steps[0].(map[string]any)["type"] != stepType {
-		t.Fatalf("initialize steps = %#v", steps)
+	return harness
+}
+
+func (harness *pluginHarness) call(t *testing.T, id, method string, params any) {
+	t.Helper()
+	if err := harness.encoder.Encode(map[string]any{"id": id, "method": method, "params": params}); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestServeTerminalNotification(t *testing.T) {
-	input := strings.NewReader(
-		`{"id":"1","method":"step.run","params":{"type":"local-notifier.notify","with":{"message":"done","delivery":"terminal"},"context":{"workflow_name":"build"}}}` + "\n" +
-			`{"id":"2","method":"shutdown","params":{}}` + "\n",
-	)
-	var output bytes.Buffer
-	notifier := newNotifier("linux", &fakeCommandRunner{})
-	if err := serve(input, &output, notifier.notify); err != nil {
-		t.Fatalf("serve() error = %v", err)
+func (harness *pluginHarness) next(t *testing.T) testFrame {
+	t.Helper()
+	if !harness.frames.Scan() {
+		t.Fatalf("plugin output closed: %v", harness.frames.Err())
 	}
-	decoder := json.NewDecoder(&output)
-	var streamed event
-	if err := decoder.Decode(&streamed); err != nil {
+	var frame testFrame
+	if err := json.Unmarshal(harness.frames.Bytes(), &frame); err != nil {
 		t.Fatal(err)
 	}
+	return frame
+}
+
+func (harness *pluginHarness) close(t *testing.T) {
+	t.Helper()
+	harness.call(t, "shutdown", "shutdown", map[string]any{})
+	frame := harness.next(t)
+	if frame.ID != "shutdown" || frame.Error != nil {
+		t.Errorf("shutdown frame = %+v", frame)
+	}
+	if err := harness.input.Close(); err != nil {
+		t.Error(err)
+	}
+	if err := <-harness.done; err != nil {
+		t.Errorf("Serve() error = %v", err)
+	}
+}
+
+func TestSDKServesTerminalNotification(t *testing.T) {
+	notifier := newNotifier("linux", &fakeCommandRunner{})
+	harness := newPluginHarness(t, notifier.notify)
+	defer harness.close(t)
+
+	harness.call(t, "run", "step.run", map[string]any{
+		"type":    stepType,
+		"with":    map[string]any{"message": "done", "delivery": "terminal"},
+		"context": map[string]any{"workflow_name": "build"},
+	})
+	streamed := harness.next(t)
 	data, err := base64.StdEncoding.DecodeString(streamed.Data)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if streamed.ID != "1" || streamed.Event != "stdout" || string(data) != "build: done\n" {
-		t.Fatalf("event = %#v, data = %q", streamed, data)
+	if streamed.ID != "run" || streamed.Event != "stdout" || string(data) != "build: done\n" {
+		t.Fatalf("event = %+v, data = %q", streamed, data)
 	}
-	var step response
-	if err := decoder.Decode(&step); err != nil {
-		t.Fatal(err)
-	}
-	if step.ID != "1" || step.Error != nil {
-		t.Fatalf("step response = %#v", step)
-	}
-	var shutdown response
-	if err := decoder.Decode(&shutdown); err != nil {
-		t.Fatal(err)
-	}
-	if shutdown.ID != "2" || shutdown.Error != nil {
-		t.Fatalf("shutdown response = %#v", shutdown)
+	result := harness.next(t)
+	if result.ID != "run" || result.Error != nil || !strings.Contains(string(result.Result), `"delivery":"terminal"`) {
+		t.Fatalf("result = %+v", result)
 	}
 }
 
-func TestServeCancellation(t *testing.T) {
+func TestSDKServesCancellation(t *testing.T) {
 	started := make(chan struct{})
 	notify := func(ctx context.Context, _ config, _ string, _ func([]byte) error) (notificationResult, error) {
 		close(started)
 		<-ctx.Done()
 		return notificationResult{}, ctx.Err()
 	}
-	requestReader, requestWriter := io.Pipe()
-	responseReader, responseWriter := io.Pipe()
-	done := make(chan error, 1)
-	go func() {
-		done <- serve(requestReader, responseWriter, notify)
-		responseWriter.Close()
-	}()
-	encoder := json.NewEncoder(requestWriter)
-	decoder := json.NewDecoder(responseReader)
-	if err := encoder.Encode(map[string]any{
-		"id": "1", "method": "step.run",
-		"params": map[string]any{"type": stepType, "with": map[string]any{"message": "done"}, "context": map[string]any{}},
-	}); err != nil {
+	harness := newPluginHarness(t, notify)
+	defer harness.close(t)
+
+	harness.call(t, "run", "step.run", map[string]any{
+		"type": stepType, "with": map[string]any{"message": "done"}, "context": map[string]any{},
+	})
+	<-started
+	if err := harness.encoder.Encode(map[string]any{"method": "cancel", "params": map[string]any{"id": "run"}}); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case <-started:
-	case <-time.After(2 * time.Second):
-		t.Fatal("notification did not start")
-	}
-	if err := encoder.Encode(map[string]any{"method": "cancel", "params": map[string]any{"id": "1"}}); err != nil {
-		t.Fatal(err)
-	}
-	var canceled response
-	if err := decoder.Decode(&canceled); err != nil {
-		t.Fatal(err)
-	}
-	if canceled.ID != "1" || canceled.Error == nil || canceled.Error.Code != "canceled" {
-		t.Fatalf("canceled response = %#v", canceled)
-	}
-	if err := encoder.Encode(map[string]any{"id": "2", "method": "shutdown", "params": map[string]any{}}); err != nil {
-		t.Fatal(err)
-	}
-	var shutdown response
-	if err := decoder.Decode(&shutdown); err != nil {
-		t.Fatal(err)
-	}
-	requestWriter.Close()
-	select {
-	case err := <-done:
-		if err != nil {
-			t.Fatalf("serve() error = %v", err)
-		}
-	case <-time.After(2 * time.Second):
-		t.Fatal("serve did not stop")
+	frame := harness.next(t)
+	if frame.ID != "run" || frame.Error == nil || frame.Error.Code != "canceled" {
+		t.Fatalf("canceled frame = %+v", frame)
 	}
 }
 
-func TestStrictStepConfiguration(t *testing.T) {
-	s := &server{}
-	_, err := s.dispatch(t.Context(), request{
-		Method: "step.validate",
-		Params: json.RawMessage(`{"type":"local-notifier.notify","with":{"message":"done","unknown":true},"context":{}}`),
+func TestSDKPreservesStrictStepConfiguration(t *testing.T) {
+	notifier := newNotifier("linux", &fakeCommandRunner{})
+	harness := newPluginHarness(t, notifier.notify)
+	defer harness.close(t)
+
+	harness.call(t, "validate", "step.validate", map[string]any{
+		"type":    stepType,
+		"with":    map[string]any{"message": "done", "unknown": true},
+		"context": map[string]any{},
 	})
-	if err == nil || !strings.Contains(err.Error(), "unknown field") {
-		t.Fatalf("dispatch() error = %v", err)
+	frame := harness.next(t)
+	if frame.Error == nil || frame.Error.Code != "notification_failed" || !strings.Contains(frame.Error.Message, "unknown field") {
+		t.Fatalf("validation frame = %+v", frame)
 	}
 }

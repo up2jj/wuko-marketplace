@@ -47,14 +47,14 @@
     },
     {
       "name": "cue-eval",
-      "package_version": "1.1.0",
+      "package_version": "1.1.1",
       "source": ".wuko/workflows/cue-eval",
       "path": "packages/cue-eval.tar.gz",
       "format": "tar.gz",
       "entry": "wuko.yaml",
       "description": "Validate, default, normalize, and generate typed configuration with the cue.eval plugin",
-      "source_sha256": "cda895aa1ed508f32551e2a6a4264feff68d0c7b94d6e2d6997cff5429732894",
-      "sha256": "7959d46929fb2aa1a05c18109c4af06727892ef82dd09cd89f745b48438f5fd0"
+      "source_sha256": "5768b91bc76bb159b1ee0a4ebd198e10682f6f65ea540e5e78acf0908c0d741b",
+      "sha256": "f7a1c06911b30e54c5706a99bc7d71abfd1ebea08219c12cdcd83e4e82a9e664"
     },
     {
       "name": "durable-state",
@@ -291,12 +291,12 @@
   "plugins": [
     {
       "namespace": "cue",
-      "plugin_version": "0.2.0",
+      "plugin_version": "0.3.0",
       "description": "Evaluate and validate typed CUE values in Wuko workflows",
       "source": ".wuko/plugin-sources/cue",
-      "source_sha256": "b259aa4fbf9b39ec282bed22bc07c0d92edf72a1eb12a73ea47403a1ce5e3f6b",
+      "source_sha256": "dc1871d510f7faabe00ce8f1c3811547340310b0ff82caa0978de69b74e5e9ce",
       "path": "plugins/cue/plugin.json",
-      "sha256": "57f9bc6ae7e3c39e58014e320e289b386aaca34f7e1887084f4456fdd59688ae",
+      "sha256": "597e5b4e743cc1e778681b0710594db56f5a98555a71ffa7ec53efed2dd6659c",
       "platforms": [
         {
           "os": "darwin",
@@ -345,12 +345,12 @@
     },
     {
       "namespace": "http",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.2.0",
       "description": "Intercept HTTP traffic and run stateful verified mock servers",
       "source": ".wuko/plugin-sources/http",
-      "source_sha256": "abb33cd983cfe6875eaae8d3a1fc74d44db154092de9327955f9705126d1d72d",
+      "source_sha256": "ca3683a87e749f59854e6ed1f59843191a92210e3881cd00adeeb87a2cf1a32a",
       "path": "plugins/http/plugin.json",
-      "sha256": "0befbfbc49b29141ab4c5ad2859fe4f1777f71ede01086f8dd75c717b19f489b",
+      "sha256": "581c27a22ffa206c82c88b7711a333f455c94298db1171d45b100f84f099f6d5",
       "platforms": [
         {
           "os": "darwin",
@@ -372,12 +372,12 @@
     },
     {
       "namespace": "jwt",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.2.0",
       "description": "Generate and verify RS256 JWTs with helpers, steps, and JWKS support",
       "source": ".wuko/plugin-sources/jwt",
-      "source_sha256": "5b9432f19d144deaa38f14048a08642c1cb0d4efe361a4fae7767a2048e1c4d0",
+      "source_sha256": "d23b907122b248f0e2810bb81212a1de081810511c3032afc533561fb07f40b2",
       "path": "plugins/jwt/plugin.json",
-      "sha256": "b8eac8720cd35d32e7804d3747ffc4e8f92b3c88f1b2d3036cb3498cedae9944",
+      "sha256": "e633ff3fc70ff7d1bca93acf05e885d97ae944866cbb7c164e0f135405e0a083",
       "platforms": [
         {
           "os": "darwin",
@@ -399,12 +399,12 @@
     },
     {
       "namespace": "local-notifier",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.2.0",
       "description": "Send local terminal or desktop notifications with automatic fallback",
       "source": ".wuko/plugin-sources/local-notifier",
-      "source_sha256": "01d7c86803f5617c1f7da3eddb2448b5613da3ecc4cd29aa95f649a71bad2250",
+      "source_sha256": "b41ab30f3205ded66c968098bee885371f462131348901c1ce73998b3ebf4674",
       "path": "plugins/local-notifier/plugin.json",
-      "sha256": "19cd89965b0b85abf50e7e0b506b3aef291d1968cbca1998e00b5a4880f70829",
+      "sha256": "6b63e49056395c975ae5954bdb903c3ffbbdf1e8b92198c71bd8dcbdab8fc846",
       "platforms": [
         {
           "os": "darwin",

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -13,6 +14,8 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/up2jj/wuko/plugin/sdk"
 )
 
 type protocolHarness struct {
@@ -31,7 +34,12 @@ type testFrame struct {
 	Event  string          `json:"event"`
 	Params json.RawMessage `json:"params"`
 	Result json.RawMessage `json:"result"`
-	Error  *wireError      `json:"error"`
+	Error  *testWireError  `json:"error"`
+}
+
+type testWireError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
 
 func newProtocolHarness(t *testing.T) *protocolHarness {
@@ -39,12 +47,17 @@ func newProtocolHarness(t *testing.T) *protocolHarness {
 	pluginInput, hostInput := io.Pipe()
 	hostOutput, pluginOutput := io.Pipe()
 	harness := &protocolHarness{input: hostInput, frames: make(chan testFrame, 32), done: make(chan error, 1)}
+	plugin, err := newPlugin()
+	if err != nil {
+		t.Fatal(err)
+	}
 	go func() {
-		harness.done <- serve(pluginInput, pluginOutput)
+		harness.done <- plugin.Serve(context.Background(), pluginInput, pluginOutput)
+		_ = pluginOutput.Close()
 		close(harness.done)
 	}()
 	go harness.read(t, hostOutput)
-	harness.call(t, "init", "initialize", map[string]any{"protocol": protocolVersion, "host_version": "test"})
+	harness.call(t, "init", "initialize", map[string]any{"protocol": sdk.Protocol})
 	frame := harness.await(t, func(frame testFrame) bool { return frame.ID == "init" })
 	if frame.Error != nil {
 		t.Fatalf("initialize failed: %s", frame.Error.Message)
@@ -54,7 +67,7 @@ func newProtocolHarness(t *testing.T) *protocolHarness {
 
 func (harness *protocolHarness) read(t *testing.T, input io.Reader) {
 	scanner := bufio.NewScanner(input)
-	scanner.Buffer(make([]byte, 64<<10), maxFrameSize)
+	scanner.Buffer(make([]byte, 64<<10), 10<<20)
 	for scanner.Scan() {
 		var frame testFrame
 		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
@@ -108,11 +121,11 @@ func (harness *protocolHarness) answerCallback(t *testing.T, frame testFrame) {
 		case "decorate":
 			result = map[string]any{"value": fmt.Sprint(params.Args[0]) + "!"}
 		default:
-			harness.respond(frame.ID, nil, &wireError{Code: "unknown_function", Message: "unknown function"})
+			harness.respond(frame.ID, nil, &testWireError{Code: "unknown_function", Message: "unknown function"})
 			return
 		}
 	default:
-		harness.respond(frame.ID, nil, &wireError{Code: "unknown_method", Message: "unknown callback"})
+		harness.respond(frame.ID, nil, &testWireError{Code: "unknown_method", Message: "unknown callback"})
 		return
 	}
 	harness.respond(frame.ID, result, nil)
@@ -128,8 +141,13 @@ func (harness *protocolHarness) cancel(t *testing.T, id string) {
 	harness.write(t, map[string]any{"method": "cancel", "params": map[string]any{"id": id}})
 }
 
-func (harness *protocolHarness) respond(id string, result any, protocolError *wireError) {
-	frame := outgoingResponseFrame{ID: id, Result: result, Error: protocolError}
+func (harness *protocolHarness) respond(id string, result any, protocolError *testWireError) {
+	frame := map[string]any{"id": id}
+	if protocolError != nil {
+		frame["error"] = protocolError
+	} else {
+		frame["result"] = result
+	}
 	data, err := json.Marshal(frame)
 	if err != nil {
 		panic(err)
@@ -177,6 +195,9 @@ func (harness *protocolHarness) close(t *testing.T) {
 	frame := harness.await(t, func(frame testFrame) bool { return frame.ID == "shutdown" })
 	if frame.Error != nil {
 		t.Errorf("shutdown failed: %s", frame.Error.Message)
+	}
+	if err := harness.input.Close(); err != nil {
+		t.Errorf("close plugin input: %v", err)
 	}
 	if err := <-harness.done; err != nil {
 		t.Errorf("serve failed: %v", err)
@@ -248,7 +269,7 @@ expectations:
 	if ready.Error != nil || ready.Event != "ready" {
 		t.Fatalf("mock did not become ready: event=%q error=%+v", ready.Event, ready.Error)
 	}
-	var result wireResult
+	var result sdk.Result
 	if err := json.Unmarshal(ready.Result, &result); err != nil {
 		t.Fatal(err)
 	}
@@ -321,7 +342,7 @@ func TestProtocolRunsMultipleServiceInstances(t *testing.T) {
 		if frame.Error != nil || frame.Event != "ready" {
 			t.Fatalf("%s did not become ready: event=%q error=%+v", frame.ID, frame.Event, frame.Error)
 		}
-		var result wireResult
+		var result sdk.Result
 		if err := json.Unmarshal(frame.Result, &result); err != nil {
 			t.Fatal(err)
 		}
@@ -358,5 +379,12 @@ func mockRunParams(directory, source string) map[string]any {
 			"inputs": map[string]any{}, "env": map[string]string{}, "steps": map[string]any{}, "dependencies": map[string]any{},
 			"bindings": map[string]any{}, "providers": map[string]any{}, "helpers": []string{"decorate"},
 		},
+	}
+}
+
+func TestNormalizeValueRestoresIntegers(t *testing.T) {
+	values := normalizeMap(map[string]any{"count": float64(1234567), "ratio": 1.5, "items": []any{float64(2)}})
+	if values["count"] != 1234567 || values["ratio"] != 1.5 || values["items"].([]any)[0] != 2 {
+		t.Fatalf("unexpected normalized values: %#v", values)
 	}
 }

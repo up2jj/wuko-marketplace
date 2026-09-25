@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
@@ -19,7 +20,11 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	if err := serve(os.Stdin, os.Stdout, externalWorker(executable)); err != nil {
+	plugin, err := newPlugin(externalWorker(executable))
+	if err == nil {
+		err = plugin.Serve(context.Background(), os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

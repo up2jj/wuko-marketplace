@@ -1,12 +1,17 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 )
 
 func main() {
-	if err := serve(os.Stdin, os.Stdout, newService()); err != nil {
+	plugin, err := newPlugin(newService())
+	if err == nil {
+		err = plugin.Serve(context.Background(), os.Stdin, os.Stdout)
+	}
+	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}

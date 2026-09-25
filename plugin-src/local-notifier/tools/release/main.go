@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/up2jj/wuko/plugin/sdk"
 )
 
 const namespace = "local-notifier"
@@ -63,7 +65,7 @@ func main() {
 		{os: "linux", arch: "amd64", label: "Linux"},
 		{os: "linux", arch: "arm64", label: "Linux"},
 	}
-	result := manifest{Version: 1, Namespace: namespace, PluginVersion: *version, Protocol: "wuko.plugin/v1"}
+	result := manifest{Version: 1, Namespace: namespace, PluginVersion: *version, Protocol: sdk.Protocol}
 	for _, item := range targets {
 		binary := filepath.Join(stage, "bin", item.os+"-"+item.arch, "wuko-plugin-"+namespace)
 		if err := os.MkdirAll(filepath.Dir(binary), 0o755); err != nil {

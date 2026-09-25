@@ -1,8 +1,9 @@
 # wuko-plugin-local-notifier
 
-`wuko-plugin-local-notifier` implements Wuko plugin protocol v1 and contributes the
-`local-notifier.notify` step. It can stream a plain notification to the terminal, submit one to
-the local desktop notification service, or try the desktop first and fall back to the terminal.
+`wuko-plugin-local-notifier` uses the Wuko Go SDK and plugin protocol v3 to contribute the
+`local-notifier.notify` step. Version 0.2 requires Wuko 0.16.0 or newer. It can stream a plain
+notification to the terminal, submit one to the local desktop notification service, or try the
+desktop first and fall back to the terminal.
 
 ```yaml
 - id: notify
@@ -33,15 +34,13 @@ For a release, run the checks and generate all four Darwin/Linux archives:
 ```sh
 just check
 just build
-just release 0.1.0
+just release 0.2.0
 ```
 
 Import the completed release from the marketplace root:
 
 ```sh
-wuko marketplace plugin add \
-  --description "Send local terminal or desktop notifications with automatic fallback" \
-  ./plugin-src/local-notifier
+wuko marketplace plugin update local-notifier ./plugin-src/local-notifier
 wuko marketplace build
 wuko marketplace build --check
 ```

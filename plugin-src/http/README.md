@@ -1,7 +1,7 @@
 # wuko-plugin-http
 
-`wuko-plugin-http` implements Wuko plugin protocol v2 and contributes two lifecycle-managed HTTP
-testing services:
+`wuko-plugin-http` uses the Wuko Go SDK and plugin protocol v3 to contribute two lifecycle-managed
+HTTP testing services. Version 0.2 requires Wuko 0.16.0 or newer:
 
 - `http.forward_proxy` intercepts and rewrites opted-in HTTP and HTTPS traffic.
 - `http.mock_server` serves stateful expectations and verifies them when its scope ends.
@@ -300,22 +300,18 @@ logged separately.
 
 ## Development and release
 
-The module is pinned to the Wuko commit that introduced protocol v2. Until that commit is available
-from the module proxy, develop it in a Go workspace containing both repositories.
+The module is pinned to the Wuko v0.16.0 release that introduced the Go SDK and protocol v3.
 
 ```sh
 just check
 just build
-just release 0.1.0
+just release 0.2.0
 ```
 
 From the marketplace root, import the release and rebuild the catalog:
 
 ```sh
-wuko marketplace plugin add \
-  --description "Intercept HTTP traffic and run stateful verified mock servers" \
-  ./plugin-src/http
+wuko marketplace plugin update http ./plugin-src/http
 wuko marketplace build
 wuko marketplace build --check
 ```
-

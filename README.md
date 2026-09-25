@@ -7,7 +7,7 @@ external service say so explicitly.
 
 ## Install
 
-The current catalog is tested against Wuko v0.14.0.
+The current catalog is tested against Wuko v0.16.0.
 The `Since` column below records the first Wuko release that supports each example.
 
 ```sh
@@ -198,7 +198,7 @@ the release. Use `--reinstall` when replacing an existing global installation:
 
 ```sh
 wuko plugin install --global --reinstall \
-  github:up2jj/wuko-marketplace@cue-v0.2.0:plugins/cue/plugin.json
+  github:up2jj/wuko-marketplace@cue-v0.3.0:plugins/cue/plugin.json
 
 # A full commit SHA is the strongest pin:
 wuko plugin install --global --reinstall \
@@ -256,7 +256,7 @@ templates, and Lua when the workflow explicitly pins the plugin. Invalid tokens 
 but become `false` in `is_valid`; configuration, JWKS, and network failures remain errors. See the
 [JWT plugin reference](plugin-src/jwt/README.md) for the full input contract and helper examples.
 
-`cue.eval` requires Wuko 0.14.0 or newer. It accepts exactly one of inline `source`, a
+`cue.eval` requires Wuko 0.16.0 or newer. It accepts exactly one of inline `source`, a
 workflow-relative `file`, or a workflow-relative `package` directory and publishes the concrete
 top-level CUE `output` at `.steps.<id>.value`:
 
@@ -366,6 +366,7 @@ plugins/<ns>/dist/*.tar.gz           # generated public platform archives
 .wuko/workflows/<name>/wuko.yaml     # workflow package sources
 .wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
 plugin-src/cue/                       # maintained source for the CUE plugin
+plugin-src/http/                      # maintained source for the HTTP plugin
 plugin-src/jwt/                       # maintained source for the JWT plugin
 plugin-src/local-notifier/            # maintained source for the local-notifier plugin
 ```
@@ -397,23 +398,23 @@ wuko marketplace build
 wuko marketplace build --check
 ```
 
-Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE
-and local-notifier plugin sources are maintained in this repository, while other plugin projects
-may live beside it.
+Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE,
+HTTP, JWT, and local-notifier plugin sources are maintained in this repository, while other plugin
+projects may live beside it.
 Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manifest.json` by hand.
 
 ### Releasing a plugin update
 
 Choose the next semantic version before starting. Use a patch release for compatible fixes, a
 minor release for compatible features, and a major release for incompatible contract changes.
-For example, to release CUE plugin `0.2.0`, update and test the maintained source, build all four
+For example, to release CUE plugin `0.3.0`, update and test the maintained source, build all four
 platform artifacts, and import the completed release:
 
 ```sh
 cd plugin-src/cue
 just check
 just build
-just release 0.2.0
+just release 0.3.0
 
 cd ../..
 wuko marketplace plugin update cue ./plugin-src/cue
@@ -441,10 +442,10 @@ tag so consumers can pin the release:
 ```sh
 git add plugin-src/cue .wuko/plugin-sources/cue plugins/cue \
   .wuko/workflows/cue-eval packages/cue-eval.tar.gz manifest.json README.md
-git commit -m "feat(cue): release v0.2.0"
-git tag cue-v0.2.0
+git commit -m "feat(cue): release v0.3.0"
+git tag cue-v0.3.0
 git push origin main
-git push origin cue-v0.2.0
+git push origin cue-v0.3.0
 ```
 
 Use `plugin add --description "..." SOURCE` only for a namespace's first import. For every later
