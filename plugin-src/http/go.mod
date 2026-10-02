@@ -6,7 +6,7 @@ require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/expr-lang/expr v1.17.8
 	github.com/google/uuid v1.6.0
-	github.com/up2jj/wuko v0.16.0
+	github.com/up2jj/wuko v0.17.0
 	github.com/yuin/gopher-lua v1.1.2
 	gopkg.in/yaml.v3 v3.0.1
 )

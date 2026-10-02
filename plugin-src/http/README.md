@@ -300,7 +300,7 @@ logged separately.
 
 ## Development and release
 
-The module is pinned to the Wuko v0.16.0 release that introduced the Go SDK and protocol v3.
+The module is pinned to Wuko v0.17.0, including the SDK protocol-v3 test harness.
 
 ```sh
 just check

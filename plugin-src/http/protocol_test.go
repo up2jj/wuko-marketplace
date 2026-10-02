@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -10,223 +9,69 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync"
 	"sync/atomic"
 	"testing"
-	"time"
 
 	"github.com/up2jj/wuko/plugin/sdk"
+	"github.com/up2jj/wuko/plugin/sdk/sdktest"
 )
 
-type protocolHarness struct {
-	input     *io.PipeWriter
-	frames    chan testFrame
-	done      chan error
-	writeMu   sync.Mutex
+type callbackCounts struct {
 	validates atomic.Int32
 	renders   atomic.Int32
 	functions atomic.Int32
 }
 
-type testFrame struct {
-	ID     string          `json:"id"`
-	Method string          `json:"method"`
-	Event  string          `json:"event"`
-	Params json.RawMessage `json:"params"`
-	Result json.RawMessage `json:"result"`
-	Error  *testWireError  `json:"error"`
-}
-
-type testWireError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-func newProtocolHarness(t *testing.T) *protocolHarness {
+func startProtocolPlugin(t *testing.T) (*sdktest.Harness, *callbackCounts) {
 	t.Helper()
-	pluginInput, hostInput := io.Pipe()
-	hostOutput, pluginOutput := io.Pipe()
-	harness := &protocolHarness{input: hostInput, frames: make(chan testFrame, 32), done: make(chan error, 1)}
 	plugin, err := newPlugin()
 	if err != nil {
 		t.Fatal(err)
 	}
-	go func() {
-		harness.done <- plugin.Serve(context.Background(), pluginInput, pluginOutput)
-		_ = pluginOutput.Close()
-		close(harness.done)
-	}()
-	go harness.read(t, hostOutput)
-	harness.call(t, "init", "initialize", map[string]any{"protocol": sdk.Protocol})
-	frame := harness.await(t, func(frame testFrame) bool { return frame.ID == "init" })
-	if frame.Error != nil {
-		t.Fatalf("initialize failed: %s", frame.Error.Message)
-	}
-	return harness
-}
-
-func (harness *protocolHarness) read(t *testing.T, input io.Reader) {
-	scanner := bufio.NewScanner(input)
-	scanner.Buffer(make([]byte, 64<<10), 10<<20)
-	for scanner.Scan() {
-		var frame testFrame
-		if err := json.Unmarshal(scanner.Bytes(), &frame); err != nil {
-			t.Errorf("decode plugin frame: %v", err)
-			return
-		}
-		if strings.HasPrefix(frame.Method, "host.") {
-			harness.answerCallback(t, frame)
-			continue
-		}
-		harness.frames <- frame
-	}
-	if err := scanner.Err(); err != nil {
-		t.Errorf("read plugin output: %v", err)
-	}
-	close(harness.frames)
-}
-
-func (harness *protocolHarness) answerCallback(t *testing.T, frame testFrame) {
-	t.Helper()
-	var params struct {
-		ParentID string         `json:"parent_id"`
-		Content  string         `json:"content"`
-		Extra    map[string]any `json:"extra"`
-		Name     string         `json:"name"`
-		Args     []any          `json:"args"`
-	}
-	if err := json.Unmarshal(frame.Params, &params); err != nil {
-		t.Errorf("decode callback %s: %v", frame.Method, err)
-		return
-	}
-	if params.ParentID == "" {
-		t.Errorf("callback %s omitted parent_id", frame.Method)
-	}
-	var result any = map[string]any{}
-	switch frame.Method {
-	case "host.template.validate":
-		harness.validates.Add(1)
-	case "host.template.render":
-		harness.renders.Add(1)
-		value := params.Content
-		if request, ok := params.Extra["request"].(map[string]any); ok {
-			value = strings.ReplaceAll(value, "{{ .request.path }}", fmt.Sprint(request["path"]))
-		}
-		result = map[string]any{"value": value}
-	case "host.function.call":
-		harness.functions.Add(1)
-		switch params.Name {
-		case "secret":
-			result = map[string]any{"value": "secret-value"}
-		case "decorate":
-			result = map[string]any{"value": fmt.Sprint(params.Args[0]) + "!"}
-		default:
-			harness.respond(frame.ID, nil, &testWireError{Code: "unknown_function", Message: "unknown function"})
-			return
-		}
-	default:
-		harness.respond(frame.ID, nil, &testWireError{Code: "unknown_method", Message: "unknown callback"})
-		return
-	}
-	harness.respond(frame.ID, result, nil)
-}
-
-func (harness *protocolHarness) call(t *testing.T, id, method string, params any) {
-	t.Helper()
-	harness.write(t, map[string]any{"id": id, "method": method, "params": params})
-}
-
-func (harness *protocolHarness) cancel(t *testing.T, id string) {
-	t.Helper()
-	harness.write(t, map[string]any{"method": "cancel", "params": map[string]any{"id": id}})
-}
-
-func (harness *protocolHarness) respond(id string, result any, protocolError *testWireError) {
-	frame := map[string]any{"id": id}
-	if protocolError != nil {
-		frame["error"] = protocolError
-	} else {
-		frame["result"] = result
-	}
-	data, err := json.Marshal(frame)
-	if err != nil {
-		panic(err)
-	}
-	harness.writeMu.Lock()
-	_, _ = harness.input.Write(append(data, '\n'))
-	harness.writeMu.Unlock()
-}
-
-func (harness *protocolHarness) write(t *testing.T, frame any) {
-	t.Helper()
-	data, err := json.Marshal(frame)
-	if err != nil {
-		t.Fatal(err)
-	}
-	harness.writeMu.Lock()
-	defer harness.writeMu.Unlock()
-	if _, err := harness.input.Write(append(data, '\n')); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func (harness *protocolHarness) await(t *testing.T, matches func(testFrame) bool) testFrame {
-	t.Helper()
-	deadline := time.NewTimer(10 * time.Second)
-	defer deadline.Stop()
-	for {
-		select {
-		case frame, ok := <-harness.frames:
-			if !ok {
-				t.Fatal("plugin output closed before expected frame")
+	counts := &callbackCounts{}
+	host := sdktest.Start(t, plugin, sdktest.WithCallbacks(sdktest.Callbacks{
+		ValidateTemplate: func(context.Context, string) error {
+			counts.validates.Add(1)
+			return nil
+		},
+		RenderTemplate: func(_ context.Context, content string, extra map[string]any) (string, error) {
+			counts.renders.Add(1)
+			if request, ok := extra["request"].(map[string]any); ok {
+				content = strings.ReplaceAll(content, "{{ .request.path }}", fmt.Sprint(request["path"]))
 			}
-			if matches(frame) {
-				return frame
+			return content, nil
+		},
+		CallFunction: func(_ context.Context, name string, args []any) (any, error) {
+			counts.functions.Add(1)
+			switch name {
+			case "secret":
+				return "secret-value", nil
+			case "decorate":
+				return fmt.Sprint(args[0]) + "!", nil
+			default:
+				return nil, fmt.Errorf("unknown function %q", name)
 			}
-		case <-deadline.C:
-			t.Fatal("timed out waiting for plugin frame")
-		}
-	}
-}
-
-func (harness *protocolHarness) close(t *testing.T) {
-	t.Helper()
-	harness.call(t, "shutdown", "shutdown", map[string]any{})
-	frame := harness.await(t, func(frame testFrame) bool { return frame.ID == "shutdown" })
-	if frame.Error != nil {
-		t.Errorf("shutdown failed: %s", frame.Error.Message)
-	}
-	if err := harness.input.Close(); err != nil {
-		t.Errorf("close plugin input: %v", err)
-	}
-	if err := <-harness.done; err != nil {
-		t.Errorf("serve failed: %v", err)
-	}
+		},
+	}))
+	return host, counts
 }
 
 func TestProtocolDeclaresManagedHTTPServices(t *testing.T) {
-	harness := newProtocolHarness(t)
-	defer harness.close(t)
+	host, _ := startProtocolPlugin(t)
 
-	for index, stepType := range []string{"http.forward_proxy", "http.mock_server"} {
-		id := fmt.Sprintf("service-%d", index)
+	for _, stepType := range []string{"http.forward_proxy", "http.mock_server"} {
 		configuration := map[string]any{}
 		if stepType == "http.forward_proxy" {
 			configuration["keep_alive"] = true
 		} else {
 			configuration["expectations"] = []string{"unused.yaml"}
 		}
-		harness.call(t, id, "step.service", map[string]any{"type": stepType, "with": configuration, "context": map[string]any{}})
-		frame := harness.await(t, func(frame testFrame) bool { return frame.ID == id })
-		if frame.Error != nil {
-			t.Fatalf("%s service declaration failed: %s", stepType, frame.Error.Message)
+		response := host.CallStep(sdktest.StepRequest{Operation: sdktest.StepService, Type: stepType, With: configuration}).Await()
+		if response.Error != nil {
+			t.Fatalf("%s service declaration failed: %s", stepType, response.Error.Message)
 		}
-		var result struct {
-			Kind      string `json:"kind"`
-			KeepAlive bool   `json:"keep_alive"`
-			FailFast  bool   `json:"fail_fast"`
-		}
-		if err := json.Unmarshal(frame.Result, &result); err != nil {
+		var result sdk.Service
+		if err := response.DecodeResult(&result); err != nil {
 			t.Fatal(err)
 		}
 		if !result.FailFast || result.Kind == "" || (stepType == "http.forward_proxy" && !result.KeepAlive) {
@@ -262,15 +107,11 @@ expectations:
 		t.Fatal(err)
 	}
 
-	harness := newProtocolHarness(t)
-	defer harness.close(t)
-	harness.call(t, "run", "step.run", mockRunParams(directory, "expectations.yaml"))
-	ready := harness.await(t, func(frame testFrame) bool { return frame.ID == "run" })
-	if ready.Error != nil || ready.Event != "ready" {
-		t.Fatalf("mock did not become ready: event=%q error=%+v", ready.Event, ready.Error)
-	}
+	host, counts := startProtocolPlugin(t)
+	call := host.CallStep(mockRunRequest(directory, "expectations.yaml"))
+	ready := call.AwaitEvent("ready")
 	var result sdk.Result
-	if err := json.Unmarshal(ready.Result, &result); err != nil {
+	if err := ready.DecodeResult(&result); err != nil {
 		t.Fatal(err)
 	}
 	url, _ := result.Outputs["url"].(string)
@@ -286,13 +127,13 @@ expectations:
 	if response.StatusCode != http.StatusOK || string(body) != "served /probe" {
 		t.Fatalf("unexpected mock response: status=%d body=%q", response.StatusCode, body)
 	}
-	harness.cancel(t, "run")
-	final := harness.await(t, func(frame testFrame) bool { return frame.ID == "run" && frame.Event == "" })
+	call.Cancel()
+	final := call.Await()
 	if final.Error != nil {
 		t.Fatalf("service final response failed: %s", final.Error.Message)
 	}
-	if harness.validates.Load() == 0 || harness.renders.Load() == 0 || harness.functions.Load() < 2 {
-		t.Fatalf("callbacks not exercised: validate=%d render=%d function=%d", harness.validates.Load(), harness.renders.Load(), harness.functions.Load())
+	if counts.validates.Load() == 0 || counts.renders.Load() == 0 || counts.functions.Load() < 2 {
+		t.Fatalf("callbacks not exercised: validate=%d render=%d function=%d", counts.validates.Load(), counts.renders.Load(), counts.functions.Load())
 	}
 }
 
@@ -309,15 +150,11 @@ expectations:
 		t.Fatal(err)
 	}
 
-	harness := newProtocolHarness(t)
-	defer harness.close(t)
-	harness.call(t, "verify", "step.run", mockRunParams(directory, "expectations.yaml"))
-	ready := harness.await(t, func(frame testFrame) bool { return frame.ID == "verify" })
-	if ready.Error != nil || ready.Event != "ready" {
-		t.Fatalf("mock did not become ready: event=%q error=%+v", ready.Event, ready.Error)
-	}
-	harness.cancel(t, "verify")
-	final := harness.await(t, func(frame testFrame) bool { return frame.ID == "verify" && frame.Event == "" })
+	host, _ := startProtocolPlugin(t)
+	call := host.CallStep(mockRunRequest(directory, "expectations.yaml"))
+	_ = call.AwaitEvent("ready")
+	call.Cancel()
+	final := call.Await()
 	if final.Error == nil || !strings.Contains(final.Error.Message, "required_request") {
 		t.Fatalf("expected verification error, got %+v", final.Error)
 	}
@@ -332,21 +169,19 @@ func TestProtocolRunsMultipleServiceInstances(t *testing.T) {
 		}
 	}
 
-	harness := newProtocolHarness(t)
-	defer harness.close(t)
-	harness.call(t, "first", "step.run", mockRunParams(directory, "first.yaml"))
-	harness.call(t, "second", "step.run", mockRunParams(directory, "second.yaml"))
+	host, _ := startProtocolPlugin(t)
+	calls := map[string]*sdktest.Call{
+		"first":  host.CallStep(mockRunRequest(directory, "first.yaml")),
+		"second": host.CallStep(mockRunRequest(directory, "second.yaml")),
+	}
 	urls := map[string]string{}
-	for len(urls) < 2 {
-		frame := harness.await(t, func(frame testFrame) bool { return frame.ID == "first" || frame.ID == "second" })
-		if frame.Error != nil || frame.Event != "ready" {
-			t.Fatalf("%s did not become ready: event=%q error=%+v", frame.ID, frame.Event, frame.Error)
-		}
+	for _, id := range []string{"first", "second"} {
+		ready := calls[id].AwaitEvent("ready")
 		var result sdk.Result
-		if err := json.Unmarshal(frame.Result, &result); err != nil {
+		if err := ready.DecodeResult(&result); err != nil {
 			t.Fatal(err)
 		}
-		urls[frame.ID], _ = result.Outputs["url"].(string)
+		urls[id], _ = result.Outputs["url"].(string)
 	}
 	for _, id := range []string{"first", "second"} {
 		response, err := http.Get(urls[id] + "/" + id)
@@ -357,27 +192,25 @@ func TestProtocolRunsMultipleServiceInstances(t *testing.T) {
 		if response.StatusCode != http.StatusOK {
 			t.Fatalf("%s returned %d", id, response.StatusCode)
 		}
-		harness.cancel(t, id)
+		calls[id].Cancel()
 	}
-	completed := map[string]bool{}
-	for len(completed) < 2 {
-		frame := harness.await(t, func(frame testFrame) bool { return frame.Event == "" && (frame.ID == "first" || frame.ID == "second") })
-		if frame.Error != nil {
-			t.Fatalf("%s failed: %s", frame.ID, frame.Error.Message)
+	for _, id := range []string{"first", "second"} {
+		response := calls[id].Await()
+		if response.Error != nil {
+			t.Fatalf("%s failed: %s", id, response.Error.Message)
 		}
-		completed[frame.ID] = true
 	}
 }
 
-func mockRunParams(directory, source string) map[string]any {
-	return map[string]any{
-		"type": "http.mock_server",
-		"with": map[string]any{"expectations": []string{source}},
-		"context": map[string]any{
-			"step_id": "mock", "workflow_name": "protocol-test", "workflow_source": filepath.Join(directory, "wuko.yaml"),
-			"workflow_dir": directory, "run_dir": directory, "vars": map[string]any{"limit": 1024}, "preset_vars": map[string]any{},
-			"inputs": map[string]any{}, "env": map[string]string{}, "steps": map[string]any{}, "dependencies": map[string]any{},
-			"bindings": map[string]any{}, "providers": map[string]any{}, "helpers": []string{"decorate"},
+func mockRunRequest(directory, source string) sdktest.StepRequest {
+	return sdktest.StepRequest{
+		Type: "http.mock_server",
+		With: map[string]any{"expectations": []string{source}},
+		Context: sdk.StepContext{
+			StepID: "mock", WorkflowName: "protocol-test", WorkflowSource: filepath.Join(directory, "wuko.yaml"),
+			WorkflowDir: directory, RunDir: directory, Vars: map[string]any{"limit": 1024}, PresetVars: map[string]any{},
+			Inputs: map[string]any{}, Env: map[string]string{}, Steps: map[string]any{}, Dependencies: map[string]map[string]any{},
+			Bindings: map[string]any{}, Providers: map[string]any{}, Helpers: []string{"decorate"},
 		},
 	}
 }

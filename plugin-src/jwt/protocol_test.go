@@ -1,14 +1,12 @@
 package main
 
 import (
-	"bufio"
-	"context"
 	"encoding/json"
-	"io"
 	"strings"
 	"testing"
 
 	"github.com/up2jj/wuko/plugin/sdk"
+	"github.com/up2jj/wuko/plugin/sdk/sdktest"
 )
 
 func TestSDKDeclaresHelpersAndSteps(t *testing.T) {
@@ -16,46 +14,10 @@ func TestSDKDeclaresHelpersAndSteps(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pluginInput, hostInput := io.Pipe()
-	hostOutput, pluginOutput := io.Pipe()
-	done := make(chan error, 1)
-	go func() { done <- plugin.Serve(context.Background(), pluginInput, pluginOutput) }()
-	encoder := json.NewEncoder(hostInput)
-	frames := bufio.NewScanner(hostOutput)
-	if err := encoder.Encode(map[string]any{
-		"id": "init", "method": "initialize", "params": map[string]any{"protocol": sdk.Protocol},
-	}); err != nil {
-		t.Fatal(err)
-	}
-	if !frames.Scan() {
-		t.Fatalf("initialize response: %v", frames.Err())
-	}
-	var initialized struct {
-		Result struct {
-			Protocol  string              `json:"protocol"`
-			Namespace string              `json:"namespace"`
-			Steps     []map[string]any    `json:"steps"`
-			Helpers   []map[string]string `json:"helpers"`
-		} `json:"result"`
-		Error any `json:"error"`
-	}
-	if err := json.Unmarshal(frames.Bytes(), &initialized); err != nil {
-		t.Fatal(err)
-	}
-	if initialized.Error != nil || initialized.Result.Protocol != sdk.Protocol || initialized.Result.Namespace != namespace || len(initialized.Result.Steps) != 4 || len(initialized.Result.Helpers) != 4 {
+	host := sdktest.Start(t, plugin)
+	initialized := host.Initialization()
+	if initialized.Protocol != sdk.Protocol || initialized.Namespace != namespace || len(initialized.Steps) != 4 || len(initialized.Helpers) != 4 {
 		t.Fatalf("initialize response = %+v", initialized)
-	}
-	if err := encoder.Encode(map[string]any{"id": "shutdown", "method": "shutdown", "params": map[string]any{}}); err != nil {
-		t.Fatal(err)
-	}
-	if !frames.Scan() {
-		t.Fatalf("shutdown response: %v", frames.Err())
-	}
-	if err := hostInput.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if err := <-done; err != nil {
-		t.Fatal(err)
 	}
 }
 
