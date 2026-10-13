@@ -345,12 +345,12 @@
     },
     {
       "namespace": "http",
-      "plugin_version": "0.2.0",
+      "plugin_version": "0.3.0",
       "description": "Intercept HTTP traffic and run stateful verified mock servers",
       "source": ".wuko/plugin-sources/http",
-      "source_sha256": "ca3683a87e749f59854e6ed1f59843191a92210e3881cd00adeeb87a2cf1a32a",
+      "source_sha256": "60dbe73776d449193cfaabde45818cfc3bccf26df948f6e1ceb202b59effaf2e",
       "path": "plugins/http/plugin.json",
-      "sha256": "581c27a22ffa206c82c88b7711a333f455c94298db1171d45b100f84f099f6d5",
+      "sha256": "4850c7b5eac9c31b539e5a5d8b3f5d0e149ca2f8c1741210b16da7e88f318787",
       "platforms": [
         {
           "os": "darwin",

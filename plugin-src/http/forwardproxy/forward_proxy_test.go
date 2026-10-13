@@ -173,6 +173,54 @@ func TestForwardProxyRejectsOversizedBody(t *testing.T) {
 	}
 }
 
+func TestForwardProxyRejectRuleReturnsConfiguredResponse(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		t.Fatal("rejected request reached upstream")
+	}))
+	defer upstream.Close()
+	const body = `{"type":"error","error":{"type":"invalid_request_error","message":"blocked locally"}}`
+	runnerValue, err := New(map[string]any{
+		"rules": []any{map[string]any{
+			"name": "guard", "when": `original.body contains "BLOCK_ME"`,
+			"reject": map[string]any{"status": 400, "content_type": "application/json", "body": body},
+		}},
+		"log": map[string]any{"destination": "stdout"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	runner := runnerValue.(*Runner)
+	services := newTestServices(t)
+	var stdout bytes.Buffer
+	result, err := runner.Run(t.Context(), step.Request{StepID: "proxy", RunDir: t.TempDir(), Services: services, Stdout: &stdout})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = runner.Cleanup(t.Context(), result) })
+	response, err := proxyClient(t, result, nil).Post(upstream.URL, "application/json", strings.NewReader(`{"message":"BLOCK_ME"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(response.Body)
+	response.Body.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusBadRequest || response.Header.Get("Content-Type") != "application/json" || string(data) != body {
+		t.Fatalf("response = %d %q %q", response.StatusCode, response.Header.Get("Content-Type"), data)
+	}
+	if response.Header.Get("Cache-Control") != "no-store" || response.Header.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("safety headers = %v", response.Header)
+	}
+	var record trafficRecord
+	if err := json.Unmarshal(bytes.TrimSpace(stdout.Bytes()), &record); err != nil {
+		t.Fatal(err)
+	}
+	if record.Status != http.StatusBadRequest || len(record.MatchedRules) != 1 || record.MatchedRules[0] != "guard" {
+		t.Fatalf("record = %#v", record)
+	}
+}
+
 func TestHTTPRootCAFileUsesForwardProxyCA(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
 		_, _ = writer.Write([]byte("through proxy"))
@@ -218,6 +266,9 @@ func TestForwardProxyConfigurationValidation(t *testing.T) {
 		{"missing file path", map[string]any{"log": map[string]any{"destination": "file"}}, "path is required"},
 		{"stdout path", map[string]any{"log": map[string]any{"destination": "stdout", "path": "x"}}, "only valid"},
 		{"body variants", map[string]any{"rules": []any{map[string]any{"when": "true", "rewrite": map[string]any{"body": "a", "body_base64": "Yg=="}}}}, "mutually exclusive"},
+		{"rewrite and reject", map[string]any{"rules": []any{map[string]any{"when": "true", "rewrite": map[string]any{"method": "GET"}, "reject": map[string]any{}}}}, "mutually exclusive"},
+		{"invalid reject status", map[string]any{"rules": []any{map[string]any{"when": "true", "reject": map[string]any{"status": 200}}}}, "between 400 and 599"},
+		{"invalid reject content type", map[string]any{"rules": []any{map[string]any{"when": "true", "reject": map[string]any{"content_type": "text/plain\r\nX-Bad: yes"}}}}, "must not contain a newline"},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {

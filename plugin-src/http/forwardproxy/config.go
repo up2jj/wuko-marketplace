@@ -3,6 +3,7 @@ package forwardproxy
 
 import (
 	"fmt"
+	"net/http"
 	"strconv"
 	"strings"
 
@@ -48,6 +49,22 @@ func (size *byteSize) UnmarshalYAML(node *yaml.Node) error {
 	return nil
 }
 
+type httpStatus int
+
+func (status *httpStatus) UnmarshalYAML(node *yaml.Node) error {
+	text := strings.TrimSpace(node.Value)
+	if templated(text) {
+		*status = 0
+		return nil
+	}
+	value, err := strconv.Atoi(text)
+	if err != nil {
+		return fmt.Errorf("status must be an integer between 400 and 599")
+	}
+	*status = httpStatus(value)
+	return nil
+}
+
 type Config struct {
 	Listen       string     `yaml:"listen,omitempty"`
 	KeepAlive    bool       `yaml:"keep_alive,omitempty"`
@@ -61,7 +78,14 @@ type Rule struct {
 	Name    string  `yaml:"name,omitempty"`
 	When    string  `yaml:"when"`
 	Rewrite Rewrite `yaml:"rewrite,omitempty"`
+	Reject  *Reject `yaml:"reject,omitempty"`
 	Stop    bool    `yaml:"stop,omitempty"`
+}
+
+type Reject struct {
+	Status      httpStatus `yaml:"status,omitempty"`
+	ContentType string     `yaml:"content_type,omitempty"`
+	Body        string     `yaml:"body,omitempty"`
 }
 
 type Rewrite struct {
@@ -123,6 +147,21 @@ func New(raw map[string]any) (step.Runner, error) {
 	if config.MaxBodyBytes == 0 {
 		config.MaxBodyBytes = byteSize(defaultMaxBodyBytes)
 	}
+	for index := range config.Rules {
+		rejection := config.Rules[index].Reject
+		if rejection == nil {
+			continue
+		}
+		if rejection.Status == 0 {
+			rejection.Status = httpStatus(http.StatusForbidden)
+		}
+		if rejection.ContentType == "" {
+			rejection.ContentType = "text/plain; charset=utf-8"
+		}
+		if rejection.Body == "" {
+			rejection.Body = http.StatusText(int(rejection.Status)) + "\n"
+		}
+	}
 	if err := validateConfig(config); err != nil {
 		return nil, err
 	}
@@ -153,6 +192,17 @@ func validateConfig(config Config) error {
 		if rule.Rewrite.URL != "" && (rule.Rewrite.Scheme != "" || rule.Rewrite.Host != "" || rule.Rewrite.Path != "") {
 			return fmt.Errorf("rule %q url is mutually exclusive with scheme, host, and path", name)
 		}
+		if rule.Reject != nil && rewriteConfigured(rule.Rewrite) {
+			return fmt.Errorf("rule %q rewrite and reject are mutually exclusive", name)
+		}
+		if rule.Reject != nil {
+			if rule.Reject.Status < 400 || rule.Reject.Status > 599 {
+				return fmt.Errorf("rule %q reject status must be between 400 and 599", name)
+			}
+			if strings.ContainsAny(rule.Reject.ContentType, "\r\n") {
+				return fmt.Errorf("rule %q reject content_type must not contain a newline", name)
+			}
+		}
 	}
 	if config.Lua != nil && (strings.TrimSpace(config.Lua.File) == "") == (strings.TrimSpace(config.Lua.Source) == "") {
 		return fmt.Errorf("lua requires exactly one of file or source")
@@ -176,6 +226,13 @@ func validateConfig(config Config) error {
 		return fmt.Errorf("log destination must be stdout or file")
 	}
 	return nil
+}
+
+func rewriteConfigured(rewrite Rewrite) bool {
+	return rewrite.URL != "" || rewrite.Scheme != "" || rewrite.Host != "" || rewrite.Path != "" ||
+		rewrite.Method != "" || len(rewrite.Headers.Set) > 0 || len(rewrite.Headers.Add) > 0 || len(rewrite.Headers.Remove) > 0 ||
+		len(rewrite.Query.Set) > 0 || len(rewrite.Query.Add) > 0 || len(rewrite.Query.Remove) > 0 ||
+		rewrite.Body != nil || rewrite.BodyBase64 != nil
 }
 
 // templated reports that a value still carries a Go template, which the engine renders only on the

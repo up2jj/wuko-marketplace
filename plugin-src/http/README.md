@@ -47,6 +47,12 @@ workflow cleanup.
             remove: [token]
           body: '{"rewritten":true}'
         stop: false
+      - name: reject_forbidden_content
+        when: 'original.body contains "BLOCK_ME"'
+        reject:
+          status: 400
+          content_type: application/json
+          body: '{"type":"error","error":{"type":"invalid_request_error","message":"Request blocked locally."}}'
     log:
       destination: stdout
       include_bodies: false
@@ -58,7 +64,10 @@ Rules evaluate `when` against the immutable `original` request. Its fields are `
 applied in declaration order; `stop: true` prevents later rules from running. A rewrite may set
 `url`, or individual `scheme`, `host`, and `path` fields; these forms are mutually exclusive. It
 may also change the method, set/add/remove header and query values, and replace either `body` or
-`body_base64`.
+`body_base64`. A rule may instead define `reject`, which is mutually exclusive with `rewrite` and
+immediately returns the configured response without contacting upstream or evaluating later rules
+or Lua. Rejection statuses must be in the `400`-`599` range; omitted values default to `403`,
+`text/plain; charset=utf-8`, and the HTTP status text.
 
 An optional isolated Lua transform runs after declarative rules. Each request gets a fresh state
 with only the base, table, string, and math libraries:

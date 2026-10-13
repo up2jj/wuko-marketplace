@@ -1,7 +1,7 @@
 {
   "version": 1,
   "namespace": "http",
-  "plugin_version": "0.2.0",
+  "plugin_version": "0.3.0",
   "protocol": "wuko.plugin/v3",
   "artifacts": [
     {
@@ -10,7 +10,7 @@
       "path": "dist/wuko-plugin-http_Darwin_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-http",
-      "sha256": "e7cba811c3116840028e503a23bb4dacea7b811fcb53fd97b33480719f11affa"
+      "sha256": "4bf466fc995c9cb7e1d22c80fe800e91ae155a9b3e818f504048b55036e6972e"
     },
     {
       "os": "darwin",
@@ -18,7 +18,7 @@
       "path": "dist/wuko-plugin-http_Darwin_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-http",
-      "sha256": "5fb55c633fda5ef55a0910039f5b33a305fa6151e7d523475c4d7c55e9ca5e21"
+      "sha256": "a8527c690af354b14d7d6d3af0627435e50942ac1682a01c8f37c3138518e5a7"
     },
     {
       "os": "linux",
@@ -26,7 +26,7 @@
       "path": "dist/wuko-plugin-http_Linux_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-http",
-      "sha256": "9f0c1699c834b0c3952747dc309a28bf142ffc776367d97cb428cee2ca4cd6e5"
+      "sha256": "62390bac5681953377e254a915cc582412cfb36f897a71a40e4cf7133c179bd5"
     },
     {
       "os": "linux",
@@ -34,7 +34,7 @@
       "path": "dist/wuko-plugin-http_Linux_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-http",
-      "sha256": "ceab9371a2a0ed9e8c2cf25133693e4e887061ebef9e4f64ceac4f5aca840839"
+      "sha256": "10066e9b08709a78a2a4a11fd24f3d94ccbf1ec9ae9897631e58229bfa94319f"
     }
   ]
 }

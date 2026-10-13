@@ -400,6 +400,10 @@ func (proxy *proxyServer) forward(writer http.ResponseWriter, request *http.Requ
 			continue
 		}
 		matched = append(matched, ruleName(rule.rule, index))
+		if rule.rule.Reject != nil {
+			proxy.reject(recorder, started, requestID, original, final, matched, *rule.rule.Reject)
+			return
+		}
 		final, err = applyRewrite(final, rule.rule.Rewrite)
 		if err != nil {
 			proxy.localError(recorder, started, requestID, original, final, matched, fmt.Errorf("applying rule %q: %w", ruleName(rule.rule, index), err))
@@ -442,6 +446,20 @@ func (proxy *proxyServer) forward(writer http.ResponseWriter, request *http.Requ
 		MatchedRules: matched, Status: recorder.status, DurationMS: milliseconds(time.Since(started))}
 	if proxyErr != nil {
 		record.Error = proxyErr.Error()
+	}
+	proxy.writeLog(record)
+}
+
+func (proxy *proxyServer) reject(writer http.ResponseWriter, started time.Time, id string, original, final requestValue, matched []string, rejection Reject) {
+	writer.Header().Set("Content-Type", rejection.ContentType)
+	writer.Header().Set("Cache-Control", "no-store")
+	writer.Header().Set("X-Content-Type-Options", "nosniff")
+	writer.WriteHeader(int(rejection.Status))
+	_, err := io.WriteString(writer, rejection.Body)
+	record := trafficRecord{Timestamp: started.UTC(), RequestID: id, Original: original, Request: final,
+		MatchedRules: matched, Status: int(rejection.Status), DurationMS: milliseconds(time.Since(started))}
+	if err != nil {
+		record.Error = fmt.Sprintf("writing rejection response: %v", err)
 	}
 	proxy.writeLog(record)
 }
