@@ -29,18 +29,9 @@ permissions, focus modes, and desktop-session settings remain authoritative.
 On macOS the plugin uses `/usr/bin/osascript`. On Linux it requires `notify-send` and a running
 desktop notification daemon for `system` delivery. Arguments are passed directly without a shell.
 
-For a release, run the checks and generate all four Darwin/Linux archives:
+From the marketplace root, run the conventional workflow and verify the catalog:
 
 ```sh
-just check
-just build
-just release 0.2.0
-```
-
-Import the completed release from the marketplace root:
-
-```sh
-wuko marketplace plugin update local-notifier ./plugin-src/local-notifier
-wuko marketplace build
+wuko marketplace plugin release --version 0.2.0 ./plugin-src/local-notifier
 wuko marketplace build --check
 ```

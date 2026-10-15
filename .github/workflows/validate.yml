@@ -1,0 +1,35 @@
+name: validate
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  marketplace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: 1.26.x
+          cache-dependency-path: plugin-src/*/go.sum
+      - name: Install pinned Wuko
+        run: go install github.com/up2jj/wuko@v0.18.0
+      - name: Check formatting
+        run: test -z "$(gofmt -l plugin-src)"
+      - name: Test and vet plugins
+        run: |
+          for directory in plugin-src/*; do
+            (cd "$directory" && go test ./... && go vet ./...)
+          done
+      - name: Validate plugin release workflows
+        run: |
+          for workflow in plugin-src/*/wuko.release.yaml; do
+            wuko run --dry-run --var version=0.0.0 --file "$workflow"
+          done
+      - name: Check generated marketplace
+        run: wuko marketplace build --check

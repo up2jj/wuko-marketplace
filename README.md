@@ -7,7 +7,7 @@ external service say so explicitly.
 
 ## Install
 
-The current catalog is tested against Wuko v0.16.0.
+The current catalog is tested against Wuko v0.18.0.
 The `Since` column below records the first Wuko release that supports each example.
 
 ```sh
@@ -379,9 +379,10 @@ break plugin discovery for that namespace in this repository and every directory
 archive `sha256`. Only the archive digest is verified at install time; the source digest is a
 rebuild-freshness key that no other tool can recompute.
 
-After changing or adding a workflow, regenerate both from the repository root:
+Add a workflow package through the CLI, then regenerate from the repository root:
 
 ```sh
+wuko marketplace workflow add ../path/to/workflow-package
 wuko marketplace build
 ```
 
@@ -398,34 +399,39 @@ wuko marketplace build
 wuko marketplace build --check
 ```
 
+Remove maintained workflow source in the same way. Removal does not touch generated files until the
+explicit build safely reconciles them against their recorded digests:
+
+```sh
+wuko marketplace workflow remove workflow-name --yes
+wuko marketplace build
+wuko marketplace build --check
+```
+
 Plugin releases are imported into the catalog rather than compiled by `marketplace build`. The CUE,
 HTTP, JWT, and local-notifier plugin sources are maintained in this repository, while other plugin
-projects may live beside it.
+projects may live beside it. Each plugin owns its native build recipe in a conventional root-level
+`wuko.release.yaml`; no plugin needs a `justfile`. The workflow returns the completed bundle
+directory.
 Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manifest.json` by hand.
 
 ### Releasing a plugin update
 
 Choose the next semantic version before starting. Use a patch release for compatible fixes, a
 minor release for compatible features, and a major release for incompatible contract changes.
-For example, to release CUE plugin `0.3.0`, update and test the maintained source, build all four
-platform artifacts, and import the completed release:
+For example, to build and publish CUE plugin `0.3.0` in one flow:
 
 ```sh
-cd plugin-src/cue
-just check
-just build
-just release 0.3.0
-
-cd ../..
-wuko marketplace plugin update cue ./plugin-src/cue
-wuko marketplace build
+wuko marketplace plugin release --version 0.3.0 ./plugin-src/cue
 wuko marketplace build --check
 ```
 
-`just release` replaces `plugin-src/cue/plugin.json` and its ignored local `dist/` directory.
-`plugin update` verifies every declared archive and digest, then atomically replaces the imported
-release in `.wuko/plugin-sources/cue/`. The final build regenerates `plugins/cue/` and
-`manifest.json`; it also rebuilds `packages/cue-eval.tar.gz` if the example workflow changed.
+`plugin release` runs `plugin-src/cue/wuko.release.yaml` from that directory. Its native Go helper
+replaces `plugin.json` and the ignored local `dist/` directory. Wuko then verifies every declared
+archive and digest, rejects version downgrades or mutated same-version artifacts, atomically
+replaces the imported release in `.wuko/plugin-sources/cue/`,
+and rebuilds `plugins/cue/` and `manifest.json`. It also rebuilds `packages/cue-eval.tar.gz` if the
+example workflow changed.
 
 Before publishing, install the generated marketplace artifact and run the repository validation
 and example workflow. `--reinstall` is required when that namespace is already installed globally:
@@ -448,9 +454,9 @@ git push origin main
 git push origin cue-v0.3.0
 ```
 
-Use `plugin add --description "..." SOURCE` only for a namespace's first import. For every later
-release, use `plugin update NAMESPACE SOURCE`; it preserves the catalog description. Both commands
-accept the same local, HTTPS, and pinned `github:` sources as direct installation. They download
-every declared platform archive, validate each digest and safe executable structure, and commit the
-import atomically without executing any binary. Failed validation leaves the previous import
-intact.
+Use `plugin release --version VERSION --description "..." SOURCE` for a namespace's first release;
+later releases preserve the catalog description when the flag is omitted. The command accepts local, HTTPS, and
+pinned `github:` sources. Local projects run their trusted conventional workflow; remote sources
+are treated only as completed bundles and are never executed. `--skip-build` explicitly publishes
+a prebuilt local bundle. Failed builds or validation leave the previous import intact. `plugin add`
+and `plugin update` remain lower-level source-only operations for exceptional maintenance.

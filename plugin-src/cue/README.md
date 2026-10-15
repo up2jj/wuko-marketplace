@@ -27,14 +27,7 @@ For a release, choose the next semantic version and run the checks before genera
 For example, to publish `0.3.0`:
 
 ```sh
-cd plugin-src/cue
-just check
-just build
-just release 0.3.0
-
-cd ../..
-wuko marketplace plugin update cue ./plugin-src/cue
-wuko marketplace build
+wuko marketplace plugin release --version 0.3.0 ./plugin-src/cue
 wuko marketplace build --check
 ```
 

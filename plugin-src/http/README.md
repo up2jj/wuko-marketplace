@@ -311,16 +311,9 @@ logged separately.
 
 The module is pinned to Wuko v0.17.0, including the SDK protocol-v3 test harness.
 
-```sh
-just check
-just build
-just release 0.2.0
-```
-
-From the marketplace root, import the release and rebuild the catalog:
+From the marketplace root, run the conventional workflow and verify the catalog:
 
 ```sh
-wuko marketplace plugin update http ./plugin-src/http
-wuko marketplace build
+wuko marketplace plugin release --version 0.2.0 ./plugin-src/http
 wuko marketplace build --check
 ```

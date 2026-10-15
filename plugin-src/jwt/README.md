@@ -113,10 +113,12 @@ present `exp`, `nbf`, and `iat`. Set `required_claims: []` explicitly to allow a
 
 ## Development
 
+From the marketplace root:
+
 ```sh
-just check
-just release 0.2.0
+wuko marketplace plugin release --version 0.2.0 ./plugin-src/jwt
+wuko marketplace build --check
 ```
 
-The release command cross-compiles deterministic Darwin/Linux archives for amd64 and arm64 with
-CGO disabled.
+The conventional workflow runs the tests, then cross-compiles deterministic Darwin/Linux archives
+for amd64 and arm64 with CGO disabled.

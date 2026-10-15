@@ -1,0 +1,32 @@
+version: 1
+name: plugin-release
+description: Build the plugin release bundle
+
+vars:
+  version: ""
+
+outputs:
+  bundle: {type: string, value: '"."'}
+
+steps:
+  - id: require_version
+    type: assert
+    with:
+      expr: vars.version != ""
+      message: release version is required
+  - id: test
+    type: shell
+    with:
+      command: go
+      args: [test, ./...]
+  - id: vet
+    type: shell
+    with:
+      command: go
+      args: [vet, ./...]
+  - id: package
+    type: shell
+    with:
+      command: go
+      args: [run, ./tools/release, -version, "{{ .vars.version }}"]
+
