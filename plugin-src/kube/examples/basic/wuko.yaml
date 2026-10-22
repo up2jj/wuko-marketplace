@@ -1,0 +1,12 @@
+version: 1
+name: worker-example
+vars:
+  message: hello from Kubernetes
+outputs:
+  message: {type: string, value: vars.message}
+steps:
+  - id: hello
+    type: shell
+    with:
+      command: printf
+      args: ['%s\n', '{{ .vars.message }}']

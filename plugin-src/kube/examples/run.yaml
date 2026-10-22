@@ -1,0 +1,26 @@
+version: 1
+name: kubernetes-example
+steps:
+  - id: remote
+    type: kube.run
+    with:
+      image: wuko-example:dev
+      workflow: /workflows/wuko.yaml
+      vars:
+        message: hello from the caller
+      concurrency:
+        group: staging-operations
+        on_busy: error
+      metadata:
+        labels: {team: platform, environment: staging}
+        annotations: {example.com/purpose: Generic worker example}
+      envFrom:
+        - configMapRef: {name: application-config, optional: true}
+        - secretRef: {name: application-secrets, optional: true}
+      env:
+        - name: LOG_LEVEL
+          value: info
+        - name: EXECUTION_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['wuko.dev/execution-id']

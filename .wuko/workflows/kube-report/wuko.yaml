@@ -1,0 +1,22 @@
+version: 1
+package_version: 0.1.0
+name: kube-report
+description: Retrieve a retained schema-v2 execution report
+
+vars:
+  namespace: "wuko-jobs"
+  kubeconfig: ""
+  context: ""
+  execution_id: ""
+
+outputs:
+  result: {type: object, value: steps.operation.value}
+
+steps:
+  - id: operation
+    type: kube.report
+    with:
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      execution_id: "{{ .vars.execution_id }}"

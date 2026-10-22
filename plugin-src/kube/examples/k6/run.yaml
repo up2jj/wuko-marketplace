@@ -1,0 +1,34 @@
+version: 1
+name: k6-datadog-example
+steps:
+  - id: test
+    type: kube.run
+    with:
+      image: registry.example.com/wuko-k6:1.0.0
+      concurrency: {group: staging-load-tests, on_busy: error}
+      envFrom:
+        - configMapRef: {name: k6-settings}
+        - secretRef: {name: k6-credentials, optional: true}
+      env:
+        - name: AGENT_HOST
+          valueFrom: {fieldRef: {fieldPath: status.hostIP}}
+        - name: EXECUTION_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.labels['wuko.dev/execution-id']
+      workflow_inline: |
+        version: 1
+        name: load-test
+        steps:
+          - id: k6
+            type: shell
+            with:
+              script: |
+                export K6_OTEL_EXPORTER_PROTOCOL=http/protobuf
+                export K6_OTEL_HTTP_EXPORTER_ENDPOINT="$AGENT_HOST:4318"
+                export K6_OTEL_HTTP_EXPORTER_INSECURE=true
+                export K6_OTEL_METRIC_PREFIX=k6_
+                export K6_OTEL_EXPORT_INTERVAL=1s
+                exec k6 run --out opentelemetry \
+                  --tag "execution_id=$EXECUTION_ID" \
+                  --tag "env=staging" /tests/test.js

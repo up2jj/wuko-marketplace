@@ -123,6 +123,94 @@
       "sha256": "6ca700943b41c7176cab141a6c2c46472c03ed9860e26455197084c511440cd7"
     },
     {
+      "name": "kube-cancel",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-cancel",
+      "path": "packages/kube-cancel.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Revoke execution authorization and request termination",
+      "source_sha256": "b952d1edc1afed3487a2ece39ae19493351bc56595dfdef03a8f7e8f2060f874",
+      "sha256": "078ceeba752029cef893254174bebf4c40e5c88b6dd70fd83e447564338eeead"
+    },
+    {
+      "name": "kube-list",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-list",
+      "path": "packages/kube-list.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "List retained Kubernetes executions",
+      "source_sha256": "ea9e6d287325d110e4cbff3e2fe6dfeaaa87c7095e659beae5e3d06cdc9e2f36",
+      "sha256": "182d366d8c30965ddc328a5aeaef071bda5fe4bbde798e2942b82a871d583756"
+    },
+    {
+      "name": "kube-logs",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-logs",
+      "path": "packages/kube-logs.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Read Kubernetes worker logs without renewing authorization",
+      "source_sha256": "13e7512c3038de743e27413a9d40edd811cc6ade3cd4c241b53ae3a0f3170b5a",
+      "sha256": "89c22f3dd7622b5557a224b6416a1b9ad78726b0d5c3eee0c7f83bc5fc15df6d"
+    },
+    {
+      "name": "kube-purge",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-purge",
+      "path": "packages/kube-purge.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Remove records only after confirmed termination",
+      "source_sha256": "8fe344ff1fcb9b75631505a4a415f2f3021a79f2f3326b5a41ffd1003284122b",
+      "sha256": "943aaada80d6a9073ec02db362e8634b0244943679ff71d6a169c6d1eb40418f"
+    },
+    {
+      "name": "kube-report",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-report",
+      "path": "packages/kube-report.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Retrieve a retained schema-v2 execution report",
+      "source_sha256": "44762fe7a4216a6d05791148dd602180fda5ad48c667ca58fdd293f3ada2cb29",
+      "sha256": "df840e0a26d9ed2bd65e8adfe96472d68ac373beacaab11a08d877392554f410"
+    },
+    {
+      "name": "kube-run",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-run",
+      "path": "packages/kube-run.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Submit an attached supervised Kubernetes workflow",
+      "source_sha256": "c55592c2094e6dda4477bf67cf194f9eeee8dd19e8310a69172cb3fa7e4e8d37",
+      "sha256": "726d5263c1643bf957128ba94912b9b048280958fafea48d92354a87a705489a"
+    },
+    {
+      "name": "kube-status",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-status",
+      "path": "packages/kube-status.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Inspect a Kubernetes execution",
+      "source_sha256": "ed5e4fa7ece24a8e1314a5523660472939379d80a4f3ea1db8a8afa672d5820c",
+      "sha256": "2e929a563ae4fc197e3232859587a4037d982d45a3d634233cfd9f608d24ed67"
+    },
+    {
+      "name": "kube-watch",
+      "package_version": "0.1.0",
+      "source": ".wuko/workflows/kube-watch",
+      "path": "packages/kube-watch.tar.gz",
+      "format": "tar.gz",
+      "entry": "wuko.yaml",
+      "description": "Observe Kubernetes execution status without owning it",
+      "source_sha256": "44358e59ab3bee02a451e179ffec0a22b630b7e8a77d1949a68c3556c97e0084",
+      "sha256": "b69a0ebac444fae74de70e1131dfd467cba6009f10538c1c880dc3f29422e453"
+    },
+    {
       "name": "local-notifier-demo",
       "package_version": "1.0.0",
       "source": ".wuko/workflows/local-notifier-demo",
@@ -378,6 +466,33 @@
       "source_sha256": "d23b907122b248f0e2810bb81212a1de081810511c3032afc533561fb07f40b2",
       "path": "plugins/jwt/plugin.json",
       "sha256": "e633ff3fc70ff7d1bca93acf05e885d97ae944866cbb7c164e0f135405e0a083",
+      "platforms": [
+        {
+          "os": "darwin",
+          "arch": "amd64"
+        },
+        {
+          "os": "darwin",
+          "arch": "arm64"
+        },
+        {
+          "os": "linux",
+          "arch": "amd64"
+        },
+        {
+          "os": "linux",
+          "arch": "arm64"
+        }
+      ]
+    },
+    {
+      "namespace": "kube",
+      "plugin_version": "0.1.0",
+      "description": "Supervised Kubernetes Jobs, exclusive groups, logs and retained reports",
+      "source": ".wuko/plugin-sources/kube",
+      "source_sha256": "ae1498fb44bef022e5bf98d2d8c161420482eefcfb38f8c1f27a85035691f70d",
+      "path": "plugins/kube/plugin.json",
+      "sha256": "d78b31ec04f2a1c27351ca1358afc5f3bc4ec6e7b77adfaf02066eab4320fdbb",
       "platforms": [
         {
           "os": "darwin",

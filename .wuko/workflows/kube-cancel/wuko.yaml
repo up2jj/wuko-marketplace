@@ -1,0 +1,22 @@
+version: 1
+package_version: 0.1.0
+name: kube-cancel
+description: Revoke execution authorization and request termination
+
+vars:
+  namespace: "wuko-jobs"
+  kubeconfig: ""
+  context: ""
+  execution_id: ""
+
+outputs:
+  result: {type: object, value: steps.operation.value}
+
+steps:
+  - id: operation
+    type: kube.cancel
+    with:
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      execution_id: "{{ .vars.execution_id }}"

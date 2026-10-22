@@ -1,0 +1,5 @@
+{
+  "version": 1,
+  "source": "local",
+  "description": "Supervised Kubernetes Jobs, exclusive groups, logs and retained reports"
+}

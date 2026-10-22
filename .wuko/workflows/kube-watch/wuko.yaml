@@ -1,0 +1,22 @@
+version: 1
+package_version: 0.1.0
+name: kube-watch
+description: Observe Kubernetes execution status without owning it
+
+vars:
+  namespace: "wuko-jobs"
+  kubeconfig: ""
+  context: ""
+  execution_id: ""
+
+outputs:
+  result: {type: object, value: steps.operation.value}
+
+steps:
+  - id: operation
+    type: kube.watch
+    with:
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      execution_id: "{{ .vars.execution_id }}"

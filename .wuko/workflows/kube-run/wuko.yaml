@@ -1,0 +1,50 @@
+version: 1
+package_version: 0.1.0
+name: kube-run
+description: Submit an attached supervised Kubernetes workflow
+
+vars:
+  image: ""
+  workflow: ""
+  workflow_inline: ""
+  execution_id: ""
+  namespace: wuko-jobs
+  kubeconfig: ""
+  context: ""
+  group: ""
+  max_duration: 30m
+
+outputs:
+  execution_id:
+    type: string
+    value: 'vars.group == "" ? steps.unguarded.execution_id : steps.guarded.execution_id'
+  result:
+    type: object
+    value: 'vars.group == "" ? steps.unguarded.value : steps.guarded.value'
+
+steps:
+  - id: unguarded
+    if: vars.group == ""
+    type: kube.run
+    with:
+      image: "{{ .vars.image }}"
+      workflow: "{{ .vars.workflow }}"
+      workflow_inline: "{{ .vars.workflow_inline }}"
+      execution_id: "{{ .vars.execution_id }}"
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      max_duration: "{{ .vars.max_duration }}"
+  - id: guarded
+    if: vars.group != ""
+    type: kube.run
+    with:
+      image: "{{ .vars.image }}"
+      workflow: "{{ .vars.workflow }}"
+      workflow_inline: "{{ .vars.workflow_inline }}"
+      execution_id: "{{ .vars.execution_id }}"
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      max_duration: "{{ .vars.max_duration }}"
+      concurrency: {group: "{{ if .vars.group }}{{ .vars.group }}{{ else }}unused{{ end }}", on_busy: error}

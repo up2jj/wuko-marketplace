@@ -1,0 +1,21 @@
+version: 1
+package_version: 0.1.0
+name: kube-logs
+description: Read Kubernetes worker logs without renewing authorization
+
+vars:
+  namespace: "wuko-jobs"
+  kubeconfig: ""
+  context: ""
+  execution_id: ""
+
+steps:
+  - id: operation
+    type: kube.logs
+    with:
+      namespace: "{{ .vars.namespace }}"
+      kubeconfig: "{{ .vars.kubeconfig }}"
+      context: "{{ .vars.context }}"
+      execution_id: "{{ .vars.execution_id }}"
+      follow: true
+      tail_lines: 100

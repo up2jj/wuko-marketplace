@@ -55,6 +55,12 @@ Remove one with `wuko uninstall NAME`.
 | [`commit-policy`](.wuko/workflows/commit-policy/wuko.yaml) | `git_conventional_commit` create and validate, `git_commit` with trailers and identities, and the commit-message helpers | v0.13.0 |
 | [`expression-toolbox`](.wuko/workflows/expression-toolbox/wuko.yaml) | Text, parsing, URI, encoding, hashing, number, and secure-generator helpers across templates, Expr, and Lua | v0.13.0 |
 
+The `kube-run`, `kube-list`, `kube-status`, `kube-watch`, `kube-logs`, `kube-report`,
+`kube-cancel`, and `kube-purge` companion packages use the generic Kubernetes
+plugin. They require a cluster and a supervised worker image. See the
+[Kubernetes plugin guide](plugin-src/kube/README.md) for installation, crash safety,
+cluster configuration references, image preparation, and a k6-to-Datadog example.
+
 ## Running an example without installing
 
 ```sh
@@ -160,6 +166,7 @@ executors, and helpers.
 
 | Plugin | Provides | Platforms |
 | --- | --- | --- |
+| [`kube`](plugin-src/kube/README.md) | Supervised Kubernetes Jobs, exclusive execution groups, logs, reports and explicit cleanup | darwin and linux on amd64 and arm64 |
 | `cue` | The `cue.eval` step for typed CUE evaluation and policy validation | darwin and linux on amd64 and arm64 |
 | `local-notifier` | The `local-notifier.notify` step for terminal or desktop notifications | darwin and linux on amd64 and arm64 |
 | `http` | The `http.forward_proxy` and `http.mock_server` managed testing services | darwin and linux on amd64 and arm64 |
@@ -365,6 +372,7 @@ plugins/<ns>/plugin.json             # generated public plugin release manifest
 plugins/<ns>/dist/*.tar.gz           # generated public platform archives
 .wuko/workflows/<name>/wuko.yaml     # workflow package sources
 .wuko/plugin-sources/<ns>/           # imported plugin releases, with build-only provenance
+plugin-src/kube/                      # Kubernetes plugin, worker image and integration tests
 plugin-src/cue/                       # maintained source for the CUE plugin
 plugin-src/http/                      # maintained source for the HTTP plugin
 plugin-src/jwt/                       # maintained source for the JWT plugin
