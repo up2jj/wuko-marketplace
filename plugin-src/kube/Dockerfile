@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS dependencies
+FROM --platform=$BUILDPLATFORM golang:1.26.10-alpine AS dependencies
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

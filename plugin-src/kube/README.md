@@ -47,7 +47,7 @@ docker build --build-arg WORKER_IMAGE=registry.example.com/wuko-worker:0.1.0 \
 
 Use a local kind cluster with `kind load docker-image` instead of pushing.
 `integration/run.sh` creates its own cluster and kubeconfig, builds test images,
-runs traffic/crash tests, and deletes that cluster on exit. It needs Go 1.26,
+runs traffic/crash tests, and deletes that cluster on exit. It needs Go 1.26.10 or newer,
 Docker, kind, kubectl, and Wuko v0.18.0+.
 
 Newer Wuko versions that require workflow-scoped plugin declarations also need

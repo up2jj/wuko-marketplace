@@ -1,7 +1,7 @@
 {
   "version": 1,
   "namespace": "cue",
-  "plugin_version": "0.3.0",
+  "plugin_version": "0.3.1",
   "protocol": "wuko.plugin/v3",
   "artifacts": [
     {
@@ -10,7 +10,7 @@
       "path": "dist/wuko-plugin-cue_Darwin_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-cue",
-      "sha256": "eabe094d9a74918fa526a62019bff71054fb590e33953dfa55be274ad767060a"
+      "sha256": "3cf1394d58478cb4c0c5995a7cc923e1ddf4eaf4b9e7744871b9b2a0045126ca"
     },
     {
       "os": "darwin",
@@ -18,7 +18,7 @@
       "path": "dist/wuko-plugin-cue_Darwin_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-cue",
-      "sha256": "0b92da305336725a85f6bf5f390631d2a54020f7ee59a798c0b7578757f986b1"
+      "sha256": "6aed997fbc431bbd9fb8b4d7a62b2af00d56e35279c58cc11aa1521bd9e983d2"
     },
     {
       "os": "linux",
@@ -26,7 +26,7 @@
       "path": "dist/wuko-plugin-cue_Linux_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-cue",
-      "sha256": "fbf3b00de2a18a9d75ce8fc47222f7dc72fe95a03a141499ae477cc215c80778"
+      "sha256": "4bbbe207048398638dc9acc0903da51643a6de4236ee5e17df21995e9c937007"
     },
     {
       "os": "linux",
@@ -34,7 +34,7 @@
       "path": "dist/wuko-plugin-cue_Linux_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-cue",
-      "sha256": "6b2439e89e17b9a61c01565737d94df5d9c708436bf948d5345e844270db17d9"
+      "sha256": "b69220b80da0e7447c525c51ef36608a000f8d0d03d94c8df0fcd9550c01ab1d"
     }
   ]
 }

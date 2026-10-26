@@ -1,6 +1,6 @@
 module github.com/up2jj/wuko-marketplace/plugin-src/cue
 
-go 1.26.0
+go 1.26.10
 
 require cuelang.org/go v0.17.1
 

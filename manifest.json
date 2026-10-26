@@ -379,12 +379,12 @@
   "plugins": [
     {
       "namespace": "cue",
-      "plugin_version": "0.3.0",
+      "plugin_version": "0.3.1",
       "description": "Evaluate and validate typed CUE values in Wuko workflows",
       "source": ".wuko/plugin-sources/cue",
-      "source_sha256": "dc1871d510f7faabe00ce8f1c3811547340310b0ff82caa0978de69b74e5e9ce",
+      "source_sha256": "8e9623ed51b5784d50dc2e2d6e7480a4bff06232e813bedb6dd26689be498fad",
       "path": "plugins/cue/plugin.json",
-      "sha256": "597e5b4e743cc1e778681b0710594db56f5a98555a71ffa7ec53efed2dd6659c",
+      "sha256": "47a2150c8a5187188b0a9f6c51e6dcf638fb5afae16772616a6f9fbb3372900a",
       "platforms": [
         {
           "os": "darwin",
@@ -406,12 +406,12 @@
     },
     {
       "namespace": "hello",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.1.1",
       "description": "An uppercase step, a local executor, and a slug helper",
       "source": ".wuko/plugin-sources/hello",
-      "source_sha256": "497b404d0c173a1abc2d5115cdf8092231624e7a76f4356a4f7f39996c09bf2d",
+      "source_sha256": "2aaaa841d200906c96ab93336f3d625f5cc845ec506cc1a62fdff98e36ae5533",
       "path": "plugins/hello/plugin.json",
-      "sha256": "18fb646ea1fa6cf9711552764fe008949d40b4a1f1371576d81415131b3aba0c",
+      "sha256": "e7d6fbc9c86ff1f21622e8d40dd399f88b2945fa389b75caef309fd99e7d4cdc",
       "platforms": [
         {
           "os": "darwin",
@@ -433,12 +433,12 @@
     },
     {
       "namespace": "http",
-      "plugin_version": "0.3.0",
+      "plugin_version": "0.3.1",
       "description": "Intercept HTTP traffic and run stateful verified mock servers",
       "source": ".wuko/plugin-sources/http",
-      "source_sha256": "60dbe73776d449193cfaabde45818cfc3bccf26df948f6e1ceb202b59effaf2e",
+      "source_sha256": "f6a95844b9dfc8330105f9a3976328b1baa82056d10edebd4d1f53bb2581c776",
       "path": "plugins/http/plugin.json",
-      "sha256": "4850c7b5eac9c31b539e5a5d8b3f5d0e149ca2f8c1741210b16da7e88f318787",
+      "sha256": "164291fde12d5ac388b25c3869023943e91501903dd2d9fd132d2349b6715225",
       "platforms": [
         {
           "os": "darwin",
@@ -460,12 +460,12 @@
     },
     {
       "namespace": "jwt",
-      "plugin_version": "0.2.0",
+      "plugin_version": "0.2.1",
       "description": "Generate and verify RS256 JWTs with helpers, steps, and JWKS support",
       "source": ".wuko/plugin-sources/jwt",
-      "source_sha256": "d23b907122b248f0e2810bb81212a1de081810511c3032afc533561fb07f40b2",
+      "source_sha256": "0061740d27d6cee53d59c5084508fc8e124a7b0161bce6bb21167bc7df316b64",
       "path": "plugins/jwt/plugin.json",
-      "sha256": "e633ff3fc70ff7d1bca93acf05e885d97ae944866cbb7c164e0f135405e0a083",
+      "sha256": "08573920bc3aef0040b81d15fab2fce1c54ba7013748d1439868bbeef4961b57",
       "platforms": [
         {
           "os": "darwin",
@@ -487,12 +487,12 @@
     },
     {
       "namespace": "kube",
-      "plugin_version": "0.1.0",
+      "plugin_version": "0.1.1",
       "description": "Supervised Kubernetes Jobs, exclusive groups, logs and retained reports",
       "source": ".wuko/plugin-sources/kube",
-      "source_sha256": "ae1498fb44bef022e5bf98d2d8c161420482eefcfb38f8c1f27a85035691f70d",
+      "source_sha256": "a6283be92336546c058e147b8838aab46ee8f4e6f5b489016aeb6c1316c08e54",
       "path": "plugins/kube/plugin.json",
-      "sha256": "d78b31ec04f2a1c27351ca1358afc5f3bc4ec6e7b77adfaf02066eab4320fdbb",
+      "sha256": "5ad2c7088ae79288120190fbd53f2ac64d323c6beacf3fce5891cba20db1501a",
       "platforms": [
         {
           "os": "darwin",
@@ -514,12 +514,12 @@
     },
     {
       "namespace": "local-notifier",
-      "plugin_version": "0.2.0",
+      "plugin_version": "0.2.1",
       "description": "Send local terminal or desktop notifications with automatic fallback",
       "source": ".wuko/plugin-sources/local-notifier",
-      "source_sha256": "b41ab30f3205ded66c968098bee885371f462131348901c1ce73998b3ebf4674",
+      "source_sha256": "2258d3c9292dc401252f6e9f23dc3f488191b81842e7ac8a7f4520875c2629f9",
       "path": "plugins/local-notifier/plugin.json",
-      "sha256": "6b63e49056395c975ae5954bdb903c3ffbbdf1e8b92198c71bd8dcbdab8fc846",
+      "sha256": "864f9323480b252232946fb4eeda09b5f1641aab41890726c2069930562ab20f",
       "platforms": [
         {
           "os": "darwin",

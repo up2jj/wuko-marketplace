@@ -1,6 +1,6 @@
 module github.com/up2jj/wuko-marketplace/plugin-src/http
 
-go 1.26.0
+go 1.26.10
 
 require (
 	github.com/bmatcuk/doublestar/v4 v4.10.0

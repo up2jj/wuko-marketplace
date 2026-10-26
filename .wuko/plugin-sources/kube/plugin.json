@@ -1,7 +1,7 @@
 {
   "version": 1,
   "namespace": "kube",
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "protocol": "wuko.plugin/v3",
   "artifacts": [
     {
@@ -10,7 +10,7 @@
       "path": "dist/wuko-plugin-kube_Darwin_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-kube",
-      "sha256": "d1ea4cd0dcd769067643e2ae383d340e02f100af4b8c21115133b647fa2a43c8"
+      "sha256": "27b24eacde20ac19613d4bc08a775e1f24dad2a4fbd50abe2deee654f0880584"
     },
     {
       "os": "darwin",
@@ -18,7 +18,7 @@
       "path": "dist/wuko-plugin-kube_Darwin_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-kube",
-      "sha256": "32d3531c585a895f06a18ab5edac6b017e4ab96085d133dce8482d93aababece"
+      "sha256": "c2264421f16dc8e1069c24ffb48d2eaa3483f2dae230be5fecf4acff8901f7b4"
     },
     {
       "os": "linux",
@@ -26,7 +26,7 @@
       "path": "dist/wuko-plugin-kube_Linux_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-kube",
-      "sha256": "9e96eff9373eee1b1d9de2634061f64094517d8f49048e0182ffe4e7037905e1"
+      "sha256": "1cc9f96c50999a7d16665dac06ccafb02002cf030b48a420ffcf03f4672dbac9"
     },
     {
       "os": "linux",
@@ -34,7 +34,7 @@
       "path": "dist/wuko-plugin-kube_Linux_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-kube",
-      "sha256": "74412bfc70850aabed87bb030007149f43cfb1a54f9a7136c62f8a8306f0c075"
+      "sha256": "a32799cad3ef8d34d9521cc0f3f722fcb2eb09527c569c60182ed7921a6e4438"
     }
   ]
 }

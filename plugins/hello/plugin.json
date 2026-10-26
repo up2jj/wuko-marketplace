@@ -1,7 +1,7 @@
 {
   "version": 1,
   "namespace": "hello",
-  "plugin_version": "0.1.0",
+  "plugin_version": "0.1.1",
   "protocol": "wuko.plugin/v1",
   "artifacts": [
     {
@@ -10,7 +10,7 @@
       "path": "dist/wuko-plugin-hello_Darwin_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-hello",
-      "sha256": "febc51b8c480bd40cee8c00b3ec60b1025494bb23ed52216b3ab3ecd06d98221"
+      "sha256": "0d3d20fd7889b9c379da484b22137625f2ded8e2d30e32db5fd581292943f98f"
     },
     {
       "os": "darwin",
@@ -18,7 +18,7 @@
       "path": "dist/wuko-plugin-hello_Darwin_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-hello",
-      "sha256": "513d5ffefcc4d0c86f2af20e35a8de56b5dcdfcd3674d2bcc079ccb26b714d3e"
+      "sha256": "634bac8d2bcfc9f7783aaf77f6ffa80291607d3cfaf782a42f9adfc747c8c360"
     },
     {
       "os": "linux",
@@ -26,7 +26,7 @@
       "path": "dist/wuko-plugin-hello_Linux_amd64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-hello",
-      "sha256": "93d293944fa677ac4479b9194e3a653907b550b4ebda456977816137227c9c90"
+      "sha256": "98596ae233bf3e141b2366c7dafbb91cf9e12264768120bea0020f3ff187d6ca"
     },
     {
       "os": "linux",
@@ -34,7 +34,7 @@
       "path": "dist/wuko-plugin-hello_Linux_arm64.tar.gz",
       "format": "tar.gz",
       "entry": "wuko-plugin-hello",
-      "sha256": "70c54b210c08c7e33d876cb3d069c4a2b3b9ce965818d91107ba02da4376de50"
+      "sha256": "75444b95209ea7d59bfa19da015984bdc3a2b43eb3a8625e8e16b1364caae316"
     }
   ]
 }

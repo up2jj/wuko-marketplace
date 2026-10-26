@@ -423,6 +423,10 @@ projects may live beside it. Each plugin owns its native build recipe in a conve
 directory.
 Do not edit `.wuko/plugin-sources/`, `plugins/`, or the plugin entries in `manifest.json` by hand.
 
+Build maintained Go plugins with Go 1.26.10 or newer for the eMudhra certificate distrust
+mitigation (CVE-2026-111943). Existing plugin binaries must be rebuilt and released under a new
+patch version to receive this fix; rebuilding Wuko or the marketplace index alone does not update them.
+
 ### Releasing a plugin update
 
 Choose the next semantic version before starting. Use a patch release for compatible fixes, a
