@@ -150,7 +150,7 @@ func Run(ctx context.Context, c execution.Control, s *execution.Service) error {
 	defer cancel()
 	err = s.UpdateRecord(publish, c.Options.ExecutionID, func(r *execution.Record) error {
 		if r.PodUID != podUID {
-			return fmt.Errorf("Pod claim changed")
+			return fmt.Errorf("pod claim changed")
 		}
 		r.State = "finished"
 		r.ExitCode = exitCode
